@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Settings, Maximize, Printer, Layout, AlertCircle, Info, FileText, X, Copy, Check, RefreshCw } from 'lucide-react';
 
-// URL Google Sheets API của bạn
+// URL Google Sheets API
 const GOOGLE_SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxG6_SjHC3__zrbNV2s5wTr2ngrj_4Az1xcxhpe9xR-KSowPMnwcKF_ro5s3Le-J0/exec'; 
 
 // Dữ liệu bảng giá dự phòng trong trường hợp API lỗi / không phản hồi
@@ -612,7 +612,7 @@ export default function App() {
       </div>
       
       <footer className="max-w-6xl mx-auto w-full mt-10 pt-6 border-t border-slate-200 text-center text-sm text-slate-500 pb-2">
-        <p className="font-medium text-slate-600">&copy; {new Date().getFullYear()} Bản quyền thuộc về Công ty Đức Thành.</p>
+        <p className="font-medium text-slate-600">&copy; {new Date().getFullYear()} Bản quyền thuộc về Công ty TNHH Sản xuất & Dịch vụ Đức Thành.</p>
         <p className="mt-1">Created by Do Trong Nghia</p>
       </footer>
     </div>
