@@ -366,7 +366,7 @@ export default function App() {
             <Layout size={28} />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-slate-900">Tính giấy Đức Thành</h1>
+            <h1 className="text-2xl font-bold text-slate-900 text-left">Tính giấy Đức Thành</h1>
             <p className="text-sm text-slate-500">Tối ưu hoá xếp bát, hỗ trợ tính sông, nhíp, bù hao tự động</p>
           </div>
         </div>
