@@ -2444,8 +2444,15 @@ export default function App() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans text-slate-800">
+    <div className="flex flex-col md:flex-row min-h-screen bg-slate-50 font-sans text-slate-800 w-full">
       <style>{`
+        #root {
+          max-width: none !important;
+          width: 100% !important;
+          padding: 0 !important;
+          margin: 0 !important;
+          text-align: left !important;
+        }
         .custom-scrollbar::-webkit-scrollbar { width: 5px; height: 5px; }
         .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
         .custom-scrollbar::-webkit-scrollbar-thumb { background-color: #cbd5e1; border-radius: 10px; }
@@ -2454,7 +2461,7 @@ export default function App() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       
-      <div className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 sticky top-0 h-screen overflow-y-auto">
+      <div className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 sticky top-0 h-screen overflow-y-auto shrink-0">
         <div className="p-6 border-b border-slate-100">
           <div className="flex items-center space-x-3 text-blue-600">
             <Layout size={28} />
@@ -2485,35 +2492,9 @@ export default function App() {
         </div>
       </div>
 
-      <div className="md:hidden bg-white border-b border-slate-200 sticky top-0 z-10 shadow-sm">
-        <div className="p-4 flex items-center space-x-2 border-b border-slate-100">
-          <Layout size={24} className="text-blue-600" />
-          <h1 className="text-lg font-bold text-slate-900">MIS Đức Thành</h1>
-        </div>
-        <div className="flex overflow-x-auto hide-scrollbar p-2 space-x-2 bg-slate-50">
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`flex-shrink-0 flex items-center space-x-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-                  ${isActive 
-                    ? 'bg-blue-600 text-white shadow' 
-                    : 'bg-white text-slate-600 border border-slate-200'}`}
-              >
-                <Icon size={16} />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
-        </div>
-      </div>
-
-      {/* ĐÃ BỎ max-w-7xl ĐỂ LAYOUT CÓ THỂ MỞ RỘNG (FULL WIDTH CHO CÁC MÀN HÌNH TO HƠN) */}
+      {/* GỠ BỎ max-w-[1800px] ĐỂ BUNG TRÀN 100% MÀN HÌNH TẤT CẢ CÁC ĐỘ PHÂN GIẢI */}
       <div className="flex-1 flex flex-col xl:h-screen xl:overflow-hidden overflow-y-auto">
-        <div className="p-4 md:p-8 w-full 2xl:max-w-[1800px] mx-auto flex flex-col flex-1 min-h-0">
+        <div className="p-4 md:p-8 w-full flex flex-col flex-1 min-h-0">
           <div className="mb-6 md:mb-8 hidden md:block shrink-0">
             <h2 className="text-2xl font-bold text-slate-900">
               Báo giá: {TABS.find(t => t.id === activeTab)?.label}
