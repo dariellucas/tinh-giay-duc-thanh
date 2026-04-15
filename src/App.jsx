@@ -611,7 +611,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:h-full min-h-0">
       {/* KHU VỰC TRÁI */}
-      <div className="xl:col-span-4 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
+      <div className="xl:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
         <h2 className="text-lg font-semibold flex items-center space-x-2 border-b pb-3 shrink-0">
           <Settings size={20} className="text-blue-500"/>
           <span>Thông Số Đầu Vào</span>
@@ -854,7 +854,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
       </div>
 
       {/* KHU VỰC PHẢI */}
-      <div className="xl:col-span-8 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6"> 
+      <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6"> 
         {error ? (
           <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
         ) : result ? (
@@ -1998,7 +1998,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
 
   return (
     <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:h-full min-h-0">
-      <div className="xl:col-span-5 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
+      <div className="xl:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
         <h2 className="text-lg font-semibold flex items-center space-x-2 border-b pb-3 shrink-0">
           <BookOpen size={20} className="text-blue-500"/>
           <span>Thông Số Catalogue</span>
@@ -2123,7 +2123,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
       </div>
 
       {/* KHU VỰC PHẢI */}
-      <div className="xl:col-span-7 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
+      <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
         {error ? (
           <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shrink-0"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
         ) : result ? (
