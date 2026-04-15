@@ -2465,9 +2465,8 @@ export default function App() {
         <div className="p-6 border-b border-slate-100">
           <div className="flex items-center space-x-3 text-blue-600">
             <Layout size={28} />
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">MIS Print</h1>
+            <h1 className="text-xl font-bold tracking-tight text-slate-900">Đức Thành Printing</h1>
           </div>
-          <p className="text-xs text-slate-500 mt-2 font-medium">Đức Thành Printing</p>
         </div>
         
         <div className="p-4 space-y-1 flex-grow">
@@ -2495,12 +2494,7 @@ export default function App() {
       {/* GỠ BỎ max-w-[1800px] ĐỂ BUNG TRÀN 100% MÀN HÌNH TẤT CẢ CÁC ĐỘ PHÂN GIẢI */}
       <div className="flex-1 flex flex-col xl:h-screen xl:overflow-hidden overflow-y-auto">
         <div className="p-4 md:p-8 w-full flex flex-col flex-1 min-h-0">
-          <div className="mb-6 md:mb-8 hidden md:block shrink-0">
-            <h2 className="text-2xl font-bold text-slate-900">
-              Báo giá: {TABS.find(t => t.id === activeTab)?.label}
-            </h2>
-            <p className="text-slate-500 mt-1">Cấu hình thông số và tính toán chi phí sản xuất.</p>
-          </div>
+          
           
           <div className="flex-1 min-h-0">
             {renderContent()}
