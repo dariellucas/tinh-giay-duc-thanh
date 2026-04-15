@@ -854,7 +854,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
       </div>
 
       {/* KHU VỰC PHẢI */}
-      <div className="xl:col-span-8 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
+      <div className="xl:col-span-8 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6"> 
         {error ? (
           <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
         ) : result ? (
