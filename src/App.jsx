@@ -2473,11 +2473,12 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   const thuGoc = 0.2;
   const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
 
-  if (boxType !== 'cai_2_dau') {
+  if (boxType !== 'cai_2_dau' && boxType !== 'dan_2_dau') {
     return (
-      <div className="w-full h-auto p-4 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 text-xs mt-4 text-center">
-        Chưa có dữ liệu vẽ trải phẳng cho kiểu hộp này. <br/>
-        (Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong> để xem cấu trúc đang test)
+      <div className="w-full h-auto p-10 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 mt-2 text-center min-h-[300px]">
+        <Box size={40} className="mb-3 opacity-50 text-orange-400" />
+        <span className="text-lg font-semibold mb-1">Chưa có dữ liệu vẽ trải phẳng</span>
+        <span className="text-sm">Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong> hoặc <strong>"Hộp dán 2 đầu"</strong> để xem cấu trúc đang test</span>
       </div>
     );
   }
@@ -2485,120 +2486,168 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   // --- TỌA ĐỘ VÀ ĐƯỜNG BẾ (CẮT ĐỨT / BẾ GÂN) ---
   const c = thuGoc; // Độ vát góc (chamfer) cho các tai gài, tai dán
 
-  // 1. Thuật toán vẽ đường viền ngoài cùng (Bế đứt)
-  const outlinePath = `
-    M 0 0
-    L 0 ${-Y}
-    L ${c} ${-Y - taiGai}
-    L ${X - c} ${-Y - taiGai}
-    L ${X} ${-Y}
-    L ${X} 0
-    L ${X + c} ${-taiPhuH}
-    L ${X + Y - c} ${-taiPhuH}
-    L ${X + Y} 0
-    L ${2*X + Y} 0
-    L ${2*X + Y + c} ${-taiPhuH}
-    L ${2*X + 2*Y - c} ${-taiPhuH}
-    L ${2*X + 2*Y} 0
-    L ${2*X + 2*Y} ${Z}
-    L ${2*X + 2*Y - c} ${Z + taiPhuH}
-    L ${2*X + Y + c} ${Z + taiPhuH}
-    L ${2*X + Y} ${Z}
-    L ${2*X + Y} ${Z + Y}
-    L ${2*X + Y - c} ${Z + Y + taiGai}
-    L ${X + Y + c} ${Z + Y + taiGai}
-    L ${X + Y} ${Z + Y}
-    L ${X + Y} ${Z}
-    L ${X + Y - c} ${Z + taiPhuH}
-    L ${X + c} ${Z + taiPhuH}
-    L ${X} ${Z}
-    L 0 ${Z}
-    L ${-taiDan} ${Z - c}
-    L ${-taiDan} ${c}
-    Z
-  `;
+  let outlinePath = "";
+  let creaseLines = [];
+  let panels = [];
+  let vPoints = [];
+  let minY = 0, maxY = 0;
 
-  // 2. Thuật toán vẽ các đường nếp gấp bên trong (Bế gân)
-  const creaseLines = [
-    // Các đường gân dọc
-    { x1: 0, y1: 0, x2: 0, y2: Z }, 
-    { x1: X, y1: 0, x2: X, y2: Z }, 
-    { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
-    { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
-    // Các đường gân ngang thân chính
-    { x1: 0, y1: 0, x2: X, y2: 0 }, 
-    { x1: 0, y1: -Y, x2: X, y2: -Y }, 
-    { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
-    { x1: X + Y, y1: Z + Y, x2: 2*X + Y, y2: Z + Y }, 
-    // Các đường gân ngang tai phụ
-    { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
-    { x1: X, y1: Z, x2: X + Y, y2: Z }, 
-    { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
-    { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
-  ];
-
-  // 3. Tâm của các mặt để chèn Text Nhãn
-  const panels = [
-    { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
-    { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
-    { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
-    { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
-    { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-    { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-    { cx: X + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-    { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
-    { cx: X + Y + X/2, cy: Z + Y/2, w: X, h: Y, label: 'Đáy' },
-    { cx: X + Y + X/2, cy: Z + Y + taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
-    { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-    { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-    { cx: 2*X + Y + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' }
-  ];
-
-  // --- TÍNH TOÁN BOUNDING BOX VÀ THÔNG SỐ ĐƯỜNG KÍCH THƯỚC ---
   const minX = -taiDan;
   const maxX = 2*X + 2*Y;
-  const minY = -Y - taiGai;
-  const maxY = Z + Y + taiGai;
 
-  const pad = Math.max(X, Y, Z) * 0.15; 
-  const dimOffset = pad * 1.5; // Khoảng cách từ hình đến đường kích thước
-  const tick = pad * 0.4;      // Độ dài vạch cản (tick mark)
+  // LỰA CHỌN CẤU TRÚC HỘP
+  if (boxType === 'cai_2_dau') {
+    minY = -Y - taiGai;
+    maxY = Z + Y + taiGai;
 
-  // ViewBox mới mở rộng không gian cho các đường kích thước
-  const vbX = minX - dimOffset * 2.5; 
-  const vbY = minY - pad;
-  const vbW = (maxX - vbX) + pad;
-  const vbH = (maxY + dimOffset * 2.5) - vbY + pad;
+    outlinePath = `
+      M 0 0
+      L 0 ${-Y}
+      L ${c} ${-Y - taiGai}
+      L ${X - c} ${-Y - taiGai}
+      L ${X} ${-Y}
+      L ${X} 0
+      L ${X + c} ${-taiPhuH}
+      L ${X + Y - c} ${-taiPhuH}
+      L ${X + Y} 0
+      L ${2*X + Y} 0
+      L ${2*X + Y + c} ${-taiPhuH}
+      L ${2*X + 2*Y - c} ${-taiPhuH}
+      L ${2*X + 2*Y} 0
+      L ${2*X + 2*Y} ${Z}
+      L ${2*X + 2*Y - c} ${Z + taiPhuH}
+      L ${2*X + Y + c} ${Z + taiPhuH}
+      L ${2*X + Y} ${Z}
+      L ${2*X + Y} ${Z + Y}
+      L ${2*X + Y - c} ${Z + Y + taiGai}
+      L ${X + Y + c} ${Z + Y + taiGai}
+      L ${X + Y} ${Z + Y}
+      L ${X + Y} ${Z}
+      L ${X + Y - c} ${Z + taiPhuH}
+      L ${X + c} ${Z + taiPhuH}
+      L ${X} ${Z}
+      L 0 ${Z}
+      L ${-taiDan} ${Z - c}
+      L ${-taiDan} ${c}
+      Z
+    `;
 
-  // Theme màu sắc
-  const theme = {
-    stroke: "#333333",    // Màu nét cắt hộp (Đen xám kỹ thuật)
-    fill: "#ffffff",      // Nền trắng
-    text: "#666666",      // Chữ nhãn nhạt
-    dim: "#ef4444",       // Đỏ kỹ thuật cho đường kích thước
-    dimLine: "#fca5a5",   // Đỏ nhạt cho đường gióng
-    dimText: "#000000"    // Màu chữ số kích thước (Đen)
-  };
+    creaseLines = [
+      { x1: 0, y1: 0, x2: 0, y2: Z }, 
+      { x1: X, y1: 0, x2: X, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+      { x1: 0, y1: 0, x2: X, y2: 0 }, 
+      { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+      { x1: X + Y, y1: Z + Y, x2: 2*X + Y, y2: Z + Y }, 
+      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+    ];
 
-  const strokeW = vbW * 0.002;
-  // Giảm font size xuống mức nhỏ, thanh thoát (tương đương 14px trên màn hình)
-  const dimFontSize = Math.max(vbW * 0.015, 0.5); 
+    panels = [
+      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+      { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+      { cx: X + Y + X/2, cy: Z + Y/2, w: X, h: Y, label: 'Đáy' },
+      { cx: X + Y + X/2, cy: Z + Y + taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: 2*X + Y + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' }
+    ];
 
-  // Dữ liệu đường kích thước dọc (Bên trái)
-  const vBaseX = minX - dimOffset;
-  const vTotalX = vBaseX - dimOffset;
-  const vPoints = [
-    { y: minY, val: taiGai },
-    { y: -Y, val: Y },
-    { y: 0, val: Z },
-    { y: Z, val: Y },
-    { y: Z + Y, val: taiGai },
-    { y: maxY, val: 0 }
-  ];
+    vPoints = [
+      { y: minY, val: taiGai },
+      { y: -Y, val: Y },
+      { y: 0, val: Z },
+      { y: Z, val: Y },
+      { y: Z + Y, val: taiGai },
+      { y: maxY, val: 0 }
+    ];
 
-  // Dữ liệu đường kích thước ngang (Bên dưới)
-  const hBaseY = maxY + dimOffset;
-  const hTotalY = hBaseY + dimOffset;
+  } else if (boxType === 'dan_2_dau') {
+    minY = -Y;
+    maxY = Z + Y;
+
+    outlinePath = `
+      M 0 0
+      L 0 ${-Y}
+      L ${X} ${-Y}
+      L ${X} 0
+      L ${X + c} ${-taiPhuH}
+      L ${X + Y - c} ${-taiPhuH}
+      L ${X + Y} 0
+      L ${X + Y} ${-Y}
+      L ${2*X + Y} ${-Y}
+      L ${2*X + Y} 0
+      L ${2*X + Y + c} ${-taiPhuH}
+      L ${2*X + 2*Y - c} ${-taiPhuH}
+      L ${2*X + 2*Y} 0
+      L ${2*X + 2*Y} ${Z}
+      L ${2*X + 2*Y - c} ${Z + taiPhuH}
+      L ${2*X + Y + c} ${Z + taiPhuH}
+      L ${2*X + Y} ${Z}
+      L ${2*X + Y} ${Z + Y}
+      L ${X + Y} ${Z + Y}
+      L ${X + Y} ${Z}
+      L ${X + Y - c} ${Z + taiPhuH}
+      L ${X + c} ${Z + taiPhuH}
+      L ${X} ${Z}
+      L ${X} ${Z + Y}
+      L 0 ${Z + Y}
+      L 0 ${Z}
+      L ${-taiDan} ${Z - c}
+      L ${-taiDan} ${c}
+      Z
+    `;
+
+    creaseLines = [
+      { x1: 0, y1: 0, x2: 0, y2: Z }, 
+      { x1: X, y1: 0, x2: X, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+      { x1: 0, y1: 0, x2: X, y2: 0 }, 
+      { x1: 0, y1: Z, x2: X, y2: Z }, 
+      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: 2*X + Y, y2: 0 }, 
+      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+    ];
+
+    panels = [
+      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp dán' },
+      { cx: X/2, cy: Z + Y/2, w: X, h: Y, label: 'Đáy dán' },
+      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+      { cx: X + Y + X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp dán' },
+      { cx: X + Y + X/2, cy: Z + Y/2, w: X, h: Y, label: 'Đáy dán' },
+      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: 2*X + Y + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' }
+    ];
+
+    vPoints = [
+      { y: minY, val: Y },
+      { y: 0, val: Z },
+      { y: Z, val: Y },
+      { y: maxY, val: 0 }
+    ];
+  }
+
+  // Dữ liệu đường kích thước ngang (Bên dưới) - Dùng chung cho cả 2 loại hộp
   const hPoints = [
     { x: minX, val: taiDan },
     { x: 0, val: X },
@@ -2608,23 +2657,42 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
     { x: maxX, val: 0 }
   ];
 
+  const pad = Math.max(X, Y, Z) * 0.15; 
+  const dimOffset = pad * 1.5; 
+  const tick = pad * 0.4;      
+
+  const vbX = minX - dimOffset * 2.5; 
+  const vbY = minY - pad;
+  const vbW = (maxX - vbX) + pad;
+  const vbH = (maxY + dimOffset * 2.5) - vbY + pad;
+
+  const theme = {
+    stroke: "#333333",    
+    fill: "#ffffff",      
+    text: "#666666",      
+    dim: "#ef4444",       
+    dimLine: "#fca5a5",   
+    dimText: "#000000"    
+  };
+
+  const strokeW = vbW * 0.002;
+  const dimFontSize = Math.max(vbW * 0.015, 0.5); 
+
+  const vBaseX = minX - dimOffset;
+  const vTotalX = vBaseX - dimOffset;
+  const hBaseY = maxY + dimOffset;
+  const hTotalY = hBaseY + dimOffset;
+
   return (
-    <div className="w-full bg-[#f8f9fa] border border-[#e2e8f0] rounded-xl overflow-hidden mt-4 relative shadow-inner p-4">
-      <div className="absolute top-3 left-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest opacity-80 flex items-center space-x-2">
-        <div className="w-2 h-2 rounded-full bg-red-500"></div>
-        <span>Bản Vẽ Kỹ Thuật (Flat Layout)</span>
-      </div>
-      
-      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[350px] mt-6">
+    <div className="w-full bg-[#f8f9fa] border border-dashed border-[#cbd5e1] rounded-xl overflow-hidden relative shadow-inner p-4 flex justify-center items-center">
+      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[600px] drop-shadow-sm">
         
         {/* VẼ ĐƯỜNG GIÓNG VÀ KÍCH THƯỚC DỌC (TRÁI) */}
         <g stroke={theme.dim} fill={theme.dim} strokeWidth={strokeW * 0.8} textAnchor="end" dominantBaseline="middle">
-          {/* Đường gióng mờ */}
           {vPoints.map((pt, i) => (
             <line key={`vExt${i}`} x1={pt.y >= 0 && pt.y <= Z ? 0 : minX} y1={pt.y} x2={vTotalX - tick} y2={pt.y} stroke={theme.dimLine} strokeWidth={strokeW * 0.5} strokeDasharray="4,4" />
           ))}
           
-          {/* Trục dọc chia đoạn */}
           <line x1={vBaseX} y1={minY} x2={vBaseX} y2={maxY} />
           {vPoints.map((pt, i) => (
             <g key={`vTick${i}`}>
@@ -2635,7 +2703,6 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
             </g>
           ))}
 
-          {/* Trục dọc tổng */}
           <line x1={vTotalX} y1={minY} x2={vTotalX} y2={maxY} />
           <line x1={vTotalX - tick} y1={minY} x2={vTotalX + tick} y2={minY} strokeWidth={strokeW * 1.5} />
           <line x1={vTotalX - tick} y1={maxY} x2={vTotalX + tick} y2={maxY} strokeWidth={strokeW * 1.5} />
@@ -2644,12 +2711,10 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 
         {/* VẼ ĐƯỜNG GIÓNG VÀ KÍCH THƯỚC NGANG (DƯỚI) */}
         <g stroke={theme.dim} fill={theme.dim} strokeWidth={strokeW * 0.8} textAnchor="middle">
-          {/* Đường gióng mờ */}
           {hPoints.map((pt, i) => (
             <line key={`hExt${i}`} x1={pt.x} y1={pt.x >= X+Y && pt.x <= 2*X+Y ? maxY : Z} x2={pt.x} y2={hTotalY + tick} stroke={theme.dimLine} strokeWidth={strokeW * 0.5} strokeDasharray="4,4" />
           ))}
 
-          {/* Trục ngang chia đoạn */}
           <line x1={minX} y1={hBaseY} x2={maxX} y2={hBaseY} />
           {hPoints.map((pt, i) => (
             <g key={`hTick${i}`}>
@@ -2660,19 +2725,16 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
             </g>
           ))}
 
-          {/* Trục ngang tổng */}
           <line x1={minX} y1={hTotalY} x2={maxX} y2={hTotalY} />
           <line x1={minX} y1={hTotalY - tick} x2={minX} y2={hTotalY + tick} strokeWidth={strokeW * 1.5} />
           <line x1={maxX} y1={hTotalY - tick} x2={maxX} y2={hTotalY + tick} strokeWidth={strokeW * 1.5} />
           <text x={(minX + maxX) / 2} y={hTotalY - tick * 1.2} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">{fmt(maxX - minX)}</text>
         </g>
 
-        {/* VẼ HÌNH TRẢI PHẲNG (Cải tiến: Nét liền ngoài, Nét đứt trong, Vát mép) */}
+        {/* VẼ HÌNH TRẢI PHẲNG */}
         <g>
-          {/* 1. Nền trắng cho toàn khối */}
           <path d={outlinePath} fill={theme.fill} stroke="none" />
           
-          {/* 2. Vẽ các đường bế gân (nét đứt) */}
           {creaseLines.map((line, i) => (
             <line 
               key={`crease-${i}`} 
@@ -2684,10 +2746,8 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
             />
           ))}
           
-          {/* 3. Vẽ viền bế đứt ngoài cùng (nét liền) */}
           <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
           
-          {/* 4. Vẽ chữ nhãn mặt */}
           {panels.map((p, i) => (
             p.w > vbW * 0.05 && p.h > vbH * 0.05 ? (
               <text 
@@ -2715,10 +2775,10 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   // --- STATES THÔNG TIN CHUNG ---
   const [productName, setProductName] = useState('Hộp mỹ phẩm');
   const [quantity, setQuantity] = useState('1000');
-  const [boxType, setBoxType] = useState('nap_cai_day_khoa');
-  const [boxWidth, setBoxWidth] = useState(''); // Ngang
-  const [boxDepth, setBoxDepth] = useState(''); // Hông
-  const [boxHeight, setBoxHeight] = useState(''); // Cao
+  const [boxType, setBoxType] = useState('cai_2_dau');
+  const [boxWidth, setBoxWidth] = useState('13'); // Ngang
+  const [boxDepth, setBoxDepth] = useState('8'); // Hông
+  const [boxHeight, setBoxHeight] = useState('8'); // Cao
 
   // --- STATES GIẤY & BÌNH BẢN ---
   const [paperType, setPaperType] = useState('Ivory');
@@ -2758,8 +2818,10 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
     ? Object.keys(paperDatabase[paperType]).map(Number).sort((a,b)=>a-b) 
     : [];
 
+  // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
+  const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
+
   const handleCalculate = () => {
-    // Tạm thời chỉ bật cờ hiển thị giao diện bên phải
     setIsCalculated(true);
   };
 
@@ -2813,11 +2875,8 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               </div>
             </div>
             
-            {/* COMPONENT 3D VIEWER ĐƯỢC THÊM VÀO ĐÂY */}
+            {/* COMPONENT 3D VIEWER */}
             <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
-            
-            {/* COMPONENT BẢN TRẢI PHẲNG (FLAT LAYOUT) */}
-            <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
           </div>
         </div>
 
@@ -2982,20 +3041,30 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
       {/* KHU VỰC PHẢI: KẾT QUẢ & BẢN VẼ */}
       <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
-        {!isCalculated ? (
+        {!(isCalculated || hasValidDimensions) ? (
           <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px] shrink-0">
             <Box size={48} className="mb-4 opacity-50 text-orange-400"/>
             <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Hộp mềm</p>
-            <p className="text-sm mt-1">Nhập đầy đủ thông số bên trái và bấm tính toán để xem bình bản hộp.</p>
+            <p className="text-sm mt-1">Nhập đầy đủ kích thước hộp để tự động xem bản vẽ kỹ thuật.</p>
           </div>
         ) : (
-          <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 h-full min-h-[400px] shrink-0">
-            <Sparkles size={48} className="mb-4 opacity-80"/>
-            <p className="font-bold text-lg mb-2 text-orange-800">Giao diện đã sẵn sàng!</p>
-            <p className="text-sm text-center max-w-md text-orange-700">
-              Bạn hãy cung cấp các công thức và quy tắc ở bước tiếp theo để AI tích hợp logic tính <strong>Kích thước trải, Khuôn bế, Công dán hộp</strong> và vẽ bản vẽ kỹ thuật.
-            </p>
-          </div>
+          <>
+            <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
+              <h2 className="text-lg font-semibold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+                <span>Bản vẽ kỹ thuật (Flat Layout)</span>
+              </h2>
+              
+              <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
+            </div>
+
+            <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
+              <Sparkles size={48} className="mb-4 opacity-80"/>
+              <p className="font-bold text-lg mb-2 text-orange-800">Giao diện đã sẵn sàng!</p>
+              <p className="text-sm text-center max-w-md text-orange-700">
+                Bạn hãy cung cấp các công thức và quy tắc ở bước tiếp theo để AI tích hợp logic tính <strong>Kích thước trải, Khuôn bế, Công dán hộp</strong> và báo giá nhé.
+              </p>
+            </div>
+          </>
         )}
       </div>
     </div>
@@ -3195,10 +3264,8 @@ export default function App() {
         </div>
       </div>
 
-      {/* GỠ BỎ max-w-[1800px] ĐỂ BUNG TRÀN 100% MÀN HÌNH TẤT CẢ CÁC ĐỘ PHÂN GIẢI */}
       <div className="flex-1 flex flex-col xl:h-screen xl:overflow-hidden overflow-y-auto">
         <div className="p-4 md:p-8 w-full flex flex-col flex-1 min-h-0">
-          
           
           <div className="flex-1 min-h-0">
             {renderContent()}
