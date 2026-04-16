@@ -2473,12 +2473,12 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   const thuGoc = 0.2;
   const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
 
-  if (boxType !== 'cai_2_dau' && boxType !== 'dan_2_dau') {
+  if (boxType !== 'cai_2_dau' && boxType !== 'dan_2_dau' && boxType !== 'nap_cai_day_khoa' && boxType !== 'nap_cai_day_moc') {
     return (
       <div className="w-full h-auto p-10 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 mt-2 text-center min-h-[300px]">
         <Box size={40} className="mb-3 opacity-50 text-orange-400" />
         <span className="text-lg font-semibold mb-1">Chưa có dữ liệu vẽ trải phẳng</span>
-        <span className="text-sm">Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong> hoặc <strong>"Hộp dán 2 đầu"</strong> để xem cấu trúc đang test</span>
+        <span className="text-sm">Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong>, <strong>"Hộp dán 2 đầu"</strong>, <strong>"Hộp nắp cài đáy khoá"</strong> hoặc <strong>"Hộp nắp cài đáy móc"</strong> để xem cấu trúc</span>
       </div>
     );
   }
@@ -2643,6 +2643,157 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
       { y: minY, val: Y },
       { y: 0, val: Z },
       { y: Z, val: Y },
+      { y: maxY, val: 0 }
+    ];
+  } else if (boxType === 'nap_cai_day_khoa') {
+    const dayKhoaH = Y / 2 + taiGai;
+    minY = -Y - taiGai;
+    maxY = Z + dayKhoaH;
+
+    outlinePath = `
+      M 0 0
+      L 0 ${-Y}
+      L ${c} ${-Y - taiGai}
+      L ${X - c} ${-Y - taiGai}
+      L ${X} ${-Y}
+      L ${X} 0
+      L ${X + c} ${-taiPhuH}
+      L ${X + Y - c} ${-taiPhuH}
+      L ${X + Y} 0
+      L ${2*X + Y} 0
+      L ${2*X + Y + c} ${-taiPhuH}
+      L ${2*X + 2*Y - c} ${-taiPhuH}
+      L ${2*X + 2*Y} 0
+      L ${2*X + 2*Y} ${Z}
+      L ${2*X + 2*Y - c} ${Z + dayKhoaH}
+      L ${2*X + Y + c} ${Z + dayKhoaH}
+      L ${2*X + Y} ${Z}
+      L ${2*X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z}
+      L ${X + Y - c} ${Z + dayKhoaH}
+      L ${X + c} ${Z + dayKhoaH}
+      L ${X} ${Z}
+      L ${X} ${Z + dayKhoaH}
+      L 0 ${Z + dayKhoaH}
+      L 0 ${Z}
+      L ${-taiDan} ${Z - c}
+      L ${-taiDan} ${c}
+      Z
+    `;
+
+    creaseLines = [
+      { x1: 0, y1: 0, x2: 0, y2: Z }, 
+      { x1: X, y1: 0, x2: X, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+      { x1: 0, y1: 0, x2: X, y2: 0 }, 
+      { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+      { x1: 0, y1: Z, x2: X, y2: Z }, 
+      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+    ];
+
+    panels = [
+      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+      { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+      { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' },
+      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+      { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: 2*X + Y + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' }
+    ];
+
+    vPoints = [
+      { y: minY, val: taiGai },
+      { y: -Y, val: Y },
+      { y: 0, val: Z },
+      { y: Z, val: dayKhoaH },
+      { y: maxY, val: 0 }
+    ];
+  } else if (boxType === 'nap_cai_day_moc') {
+    const dayKhoaH = Y / 2 + taiGai;
+    const taiDayH = dayKhoaH * 0.75; // 75% height của đáy theo yêu cầu
+    minY = -Y - taiGai;
+    maxY = Z + dayKhoaH;
+
+    outlinePath = `
+      M 0 0
+      L 0 ${-Y}
+      L ${c} ${-Y - taiGai}
+      L ${X - c} ${-Y - taiGai}
+      L ${X} ${-Y}
+      L ${X} 0
+      L ${X + c} ${-taiPhuH}
+      L ${X + Y - c} ${-taiPhuH}
+      L ${X + Y} 0
+      L ${2*X + Y} 0
+      L ${2*X + Y + c} ${-taiPhuH}
+      L ${2*X + 2*Y - c} ${-taiPhuH}
+      L ${2*X + 2*Y} 0
+      L ${2*X + 2*Y} ${Z}
+      L ${2*X + 2*Y - c} ${Z + taiDayH}
+      L ${2*X + Y + c} ${Z + taiDayH}
+      L ${2*X + Y} ${Z}
+      L ${2*X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z}
+      L ${X + Y - c} ${Z + taiDayH}
+      L ${X + c} ${Z + taiDayH}
+      L ${X} ${Z}
+      L ${X} ${Z + dayKhoaH}
+      L 0 ${Z + dayKhoaH}
+      L 0 ${Z}
+      L ${-taiDan} ${Z - c}
+      L ${-taiDan} ${c}
+      Z
+    `;
+
+    creaseLines = [
+      { x1: 0, y1: 0, x2: 0, y2: Z }, 
+      { x1: X, y1: 0, x2: X, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+      { x1: 0, y1: 0, x2: X, y2: 0 }, 
+      { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+      { x1: 0, y1: Z, x2: X, y2: Z }, 
+      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+    ];
+
+    panels = [
+      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+      { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+      { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy móc' },
+      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y/2, cy: Z + taiDayH/2, w: Y, h: taiDayH, label: 'Tai đáy' },
+      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+      { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy móc' },
+      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: 2*X + Y + Y/2, cy: Z + taiDayH/2, w: Y, h: taiDayH, label: 'Tai đáy' }
+    ];
+
+    vPoints = [
+      { y: minY, val: taiGai },
+      { y: -Y, val: Y },
+      { y: 0, val: Z },
+      { y: Z, val: dayKhoaH },
       { y: maxY, val: 0 }
     ];
   }
