@@ -2299,10 +2299,707 @@ function VoCalculator() {
   </div>;
 }
 
-function HopMemCalculator() {
-  return <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px]">
-    <Box size={48} className="mb-4 text-orange-300"/><p className="text-lg font-medium text-slate-600">Module Hộp Mềm</p><p className="text-sm">Đang phát triển bộ công thức tự động nội suy kích thước trải, khuôn bế, công bế/dán...</p>
-  </div>;
+// ==========================================
+// COMPONENT VẼ HỘP 3D (ISOMETRIC SVG)
+// ==========================================
+function Box3DViewer({ width, depth, height }) {
+  // Thay dấu phẩy thành dấu chấm để parse số thập phân (VD: 7,5 -> 7.5)
+  const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
+  const w = safeParse(width);
+  const d = safeParse(depth);
+  const h = safeParse(height);
+
+  if (w <= 0 || d <= 0 || h <= 0) {
+    return (
+      <div className="w-full h-[220px] bg-white border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-slate-400 text-xs mt-4">
+        <Box size={24} className="mb-2 opacity-50 text-orange-400" />
+        Nhập kích thước (Ngang, Hông, Cao) để xem mô hình 3D
+      </div>
+    );
+  }
+
+  // Góc chiếu Isometric 30 độ
+  const cos30 = 0.866;
+  const sin30 = 0.5;
+
+  const project = (x, y, z) => ({
+    cx: (x - y) * cos30,
+    cy: (x + y) * sin30 - z
+  });
+
+  // Tự động scale để hình luôn nằm cân đối trong khung
+  const maxDim = Math.max(w, d, h);
+  const scale = 120 / maxDim; 
+  const sw = w * scale;
+  const sd = d * scale;
+  const sh = h * scale;
+
+  // Tính toán 8 đỉnh của khối hộp (Góc nhìn từ mặt trước)
+  const pO = project(0, 0, 0);       
+  const pX = project(sw, 0, 0);      
+  const pY = project(0, sd, 0);      
+  const pXY = project(sw, sd, 0);    
+  
+  const pZ = project(0, 0, sh);      
+  const pXZ = project(sw, 0, sh);    
+  const pYZ = project(0, sd, sh);    
+  const pXYZ = project(sw, sd, sh);  
+
+  // Bounding Box để set ViewBox tự động căn giữa
+  const minX = Math.min(pO.cx, pX.cx, pY.cx, pXY.cx, pZ.cx, pXZ.cx, pYZ.cx, pXYZ.cx);
+  const maxX = Math.max(pO.cx, pX.cx, pY.cx, pXY.cx, pZ.cx, pXZ.cx, pYZ.cx, pXYZ.cx);
+  const minY = Math.min(pO.cy, pX.cy, pY.cy, pXY.cy, pZ.cy, pXZ.cy, pYZ.cy, pXYZ.cy);
+  const maxY = Math.max(pO.cy, pX.cy, pY.cy, pXY.cy, pZ.cy, pXZ.cy, pYZ.cy, pXYZ.cy);
+
+  // Lề (padding) cho text và đường dóng
+  const vbX = minX - 40;
+  const vbY = minY - 20;
+  const vbW = maxX - minX + 110; 
+  const vbH = maxY - minY + 70;  
+
+  // Màu sắc chuẩn theo mẫu
+  const theme = {
+    stroke: "#d97743",    // Cam đất (Viền)
+    topFace: "#f9ecd8",   // Sáng nhất (Mặt trên)
+    leftFace: "#f2d1b3",  // Sáng vừa (Mặt ngang)
+    rightFace: "#e8ba95", // Tối nhất (Mặt hông)
+    dimLine: "#d97743",   // Màu nét dóng
+    text: "#d97743"       // Màu chữ
+  };
+
+  return (
+    <div className="w-full h-[220px] bg-[#faf8f5] border border-[#ebd7c9] rounded-xl flex items-center justify-center overflow-hidden mt-4 relative shadow-sm">
+      <div className="absolute top-3 left-4 text-[10px] font-bold text-[#d97743] uppercase tracking-widest opacity-70">PREVIEW 3D</div>
+      
+      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-full drop-shadow-sm">
+        
+        {/* MẶT TRÁI (Ngang / Width) */}
+        <polygon points={`${pY.cx},${pY.cy} ${pXY.cx},${pXY.cy} ${pXYZ.cx},${pXYZ.cy} ${pYZ.cx},${pYZ.cy}`} fill={theme.leftFace} stroke={theme.stroke} strokeWidth="1" strokeLinejoin="round" />
+        
+        {/* MẶT PHẢI (Hông / Depth) */}
+        <polygon points={`${pX.cx},${pX.cy} ${pXY.cx},${pXY.cy} ${pXYZ.cx},${pXYZ.cy} ${pXZ.cx},${pXZ.cy}`} fill={theme.rightFace} stroke={theme.stroke} strokeWidth="1" strokeLinejoin="round" />
+        
+        {/* MẶT TRÊN (Top) */}
+        <polygon points={`${pZ.cx},${pZ.cy} ${pXZ.cx},${pXZ.cy} ${pXYZ.cx},${pXYZ.cy} ${pYZ.cx},${pYZ.cy}`} fill={theme.topFace} stroke={theme.stroke} strokeWidth="1" strokeLinejoin="round" />
+
+        {/* KÍCH THƯỚC: NGANG (X) */}
+        <g opacity="0.85">
+          {/* Đường dóng nét đứt thả xuống */}
+          <line x1={pY.cx} y1={pY.cy} x2={pY.cx} y2={pY.cy + 25} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          <line x1={pXY.cx} y1={pXY.cy} x2={pXY.cx} y2={pXY.cy + 25} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          {/* Đoạn thẳng song song với cạnh đáy */}
+          <line x1={pY.cx} y1={pY.cy + 20} x2={pXY.cx} y2={pXY.cy + 20} stroke={theme.dimLine} strokeWidth="1" />
+          {/* Tick marks (Chặn 2 đầu) */}
+          <line x1={pY.cx} y1={pY.cy + 17} x2={pY.cx} y2={pY.cy + 23} stroke={theme.dimLine} strokeWidth="1.2" />
+          <line x1={pXY.cx} y1={pXY.cy + 17} x2={pXY.cx} y2={pXY.cy + 23} stroke={theme.dimLine} strokeWidth="1.2" />
+          {/* Text */}
+          <text x={(pY.cx + pXY.cx)/2} y={(pY.cy + pXY.cy)/2 + 30} fill={theme.text} fontSize="9" fontWeight="800" textAnchor="middle">Ngang: {width}</text>
+        </g>
+
+        {/* KÍCH THƯỚC: HÔNG (Y) */}
+        <g opacity="0.85">
+          {/* Đường dóng nét đứt thả xuống */}
+          <line x1={pX.cx} y1={pX.cy} x2={pX.cx} y2={pX.cy + 25} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          <line x1={pXY.cx} y1={pXY.cy} x2={pXY.cx} y2={pXY.cy + 25} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          {/* Đoạn thẳng song song với cạnh đáy */}
+          <line x1={pX.cx} y1={pX.cy + 20} x2={pXY.cx} y2={pXY.cy + 20} stroke={theme.dimLine} strokeWidth="1" />
+          {/* Tick marks (Chặn 2 đầu) */}
+          <line x1={pX.cx} y1={pX.cy + 17} x2={pX.cx} y2={pX.cy + 23} stroke={theme.dimLine} strokeWidth="1.2" />
+          <line x1={pXY.cx} y1={pXY.cy + 17} x2={pXY.cx} y2={pXY.cy + 23} stroke={theme.dimLine} strokeWidth="1.2" />
+          {/* Text */}
+          <text x={(pX.cx + pXY.cx)/2} y={(pX.cy + pXY.cy)/2 + 30} fill={theme.text} fontSize="9" fontWeight="800" textAnchor="middle">Hông: {depth}</text>
+        </g>
+
+        {/* KÍCH THƯỚC: CAO (Z) */}
+        <g opacity="0.85">
+          {/* Đường dóng nét đứt kéo ngang sang phải */}
+          <line x1={pX.cx} y1={pX.cy} x2={pX.cx + 25} y2={pX.cy} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          <line x1={pXZ.cx} y1={pXZ.cy} x2={pXZ.cx + 25} y2={pXZ.cy} stroke={theme.dimLine} strokeWidth="0.8" strokeDasharray="2,2"/>
+          {/* Đoạn thẳng dọc song song cạnh bên */}
+          <line x1={pX.cx + 20} y1={pX.cy} x2={pXZ.cx + 20} y2={pXZ.cy} stroke={theme.dimLine} strokeWidth="1" />
+          {/* Tick marks (Chặn 2 đầu) */}
+          <line x1={pX.cx + 17} y1={pX.cy} x2={pX.cx + 23} y2={pX.cy} stroke={theme.dimLine} strokeWidth="1.2" />
+          <line x1={pXZ.cx + 17} y1={pXZ.cy} x2={pXZ.cx + 23} y2={pXZ.cy} stroke={theme.dimLine} strokeWidth="1.2" />
+          {/* Text */}
+          <text x={pX.cx + 28} y={(pX.cy + pXZ.cy)/2 + 3} fill={theme.text} fontSize="9" fontWeight="800" textAnchor="start">Cao: {height}</text>
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+// ==========================================
+// COMPONENT VẼ TRẢI PHẲNG (FLAT LAYOUT SVG)
+// ==========================================
+function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
+  const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
+  const X = safeParse(width);
+  const Y = safeParse(depth);
+  const Z = safeParse(height);
+
+  if (X <= 0 || Y <= 0 || Z <= 0) {
+    return null; // Không vẽ nếu chưa nhập đủ kích thước
+  }
+
+  // Hàm làm tròn số hiển thị trên đường kích thước
+  const fmt = (num) => Number(Math.abs(num).toFixed(2));
+
+  // --- HÀM TRA CỨU SHEET HOPMEM ---
+  const getBoxConfig = (w, db) => {
+    const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
+    if (!db || !Array.isArray(db) || db.length === 0) return fallback;
+    
+    for (let i = 0; i < db.length; i++) {
+      const row = db[i];
+      const fromX = parseFloat(row.fromX) || 0;
+      const toX = parseFloat(row.toX) || 999999;
+      
+      if (w >= fromX && w <= toX) {
+        return {
+          taiDan: parseFloat(row.taiDan) || fallback.taiDan,
+          taiGai: parseFloat(row.napHop) || fallback.taiGai, 
+          khoaDayGai: parseFloat(row.khoaDayGai) || fallback.khoaDayGai,
+          khoaDayCheo: parseFloat(row.khoaDayCheo) || fallback.khoaDayCheo
+        };
+      }
+    }
+    return fallback;
+  };
+
+  const boxConfig = getBoxConfig(X, hopMemDatabase);
+  const taiGai = boxConfig.taiGai;
+  const taiDan = boxConfig.taiDan;
+  
+  const thuGoc = 0.2;
+  const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
+
+  if (boxType !== 'cai_2_dau') {
+    return (
+      <div className="w-full h-auto p-4 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 text-xs mt-4 text-center">
+        Chưa có dữ liệu vẽ trải phẳng cho kiểu hộp này. <br/>
+        (Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong> để xem cấu trúc đang test)
+      </div>
+    );
+  }
+
+  // --- TỌA ĐỘ VÀ ĐƯỜNG BẾ (CẮT ĐỨT / BẾ GÂN) ---
+  const c = thuGoc; // Độ vát góc (chamfer) cho các tai gài, tai dán
+
+  // 1. Thuật toán vẽ đường viền ngoài cùng (Bế đứt)
+  const outlinePath = `
+    M 0 0
+    L 0 ${-Y}
+    L ${c} ${-Y - taiGai}
+    L ${X - c} ${-Y - taiGai}
+    L ${X} ${-Y}
+    L ${X} 0
+    L ${X + c} ${-taiPhuH}
+    L ${X + Y - c} ${-taiPhuH}
+    L ${X + Y} 0
+    L ${2*X + Y} 0
+    L ${2*X + Y + c} ${-taiPhuH}
+    L ${2*X + 2*Y - c} ${-taiPhuH}
+    L ${2*X + 2*Y} 0
+    L ${2*X + 2*Y} ${Z}
+    L ${2*X + 2*Y - c} ${Z + taiPhuH}
+    L ${2*X + Y + c} ${Z + taiPhuH}
+    L ${2*X + Y} ${Z}
+    L ${2*X + Y} ${Z + Y}
+    L ${2*X + Y - c} ${Z + Y + taiGai}
+    L ${X + Y + c} ${Z + Y + taiGai}
+    L ${X + Y} ${Z + Y}
+    L ${X + Y} ${Z}
+    L ${X + Y - c} ${Z + taiPhuH}
+    L ${X + c} ${Z + taiPhuH}
+    L ${X} ${Z}
+    L 0 ${Z}
+    L ${-taiDan} ${Z - c}
+    L ${-taiDan} ${c}
+    Z
+  `;
+
+  // 2. Thuật toán vẽ các đường nếp gấp bên trong (Bế gân)
+  const creaseLines = [
+    // Các đường gân dọc
+    { x1: 0, y1: 0, x2: 0, y2: Z }, 
+    { x1: X, y1: 0, x2: X, y2: Z }, 
+    { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+    { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+    // Các đường gân ngang thân chính
+    { x1: 0, y1: 0, x2: X, y2: 0 }, 
+    { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+    { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+    { x1: X + Y, y1: Z + Y, x2: 2*X + Y, y2: Z + Y }, 
+    // Các đường gân ngang tai phụ
+    { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+    { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+    { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+    { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+  ];
+
+  // 3. Tâm của các mặt để chèn Text Nhãn
+  const panels = [
+    { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+    { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+    { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+    { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+    { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+    { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+    { cx: X + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+    { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+    { cx: X + Y + X/2, cy: Z + Y/2, w: X, h: Y, label: 'Đáy' },
+    { cx: X + Y + X/2, cy: Z + Y + taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+    { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+    { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+    { cx: 2*X + Y + Y/2, cy: Z + taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' }
+  ];
+
+  // --- TÍNH TOÁN BOUNDING BOX VÀ THÔNG SỐ ĐƯỜNG KÍCH THƯỚC ---
+  const minX = -taiDan;
+  const maxX = 2*X + 2*Y;
+  const minY = -Y - taiGai;
+  const maxY = Z + Y + taiGai;
+
+  const pad = Math.max(X, Y, Z) * 0.15; 
+  const dimOffset = pad * 1.5; // Khoảng cách từ hình đến đường kích thước
+  const tick = pad * 0.4;      // Độ dài vạch cản (tick mark)
+
+  // ViewBox mới mở rộng không gian cho các đường kích thước
+  const vbX = minX - dimOffset * 2.5; 
+  const vbY = minY - pad;
+  const vbW = (maxX - vbX) + pad;
+  const vbH = (maxY + dimOffset * 2.5) - vbY + pad;
+
+  // Theme màu sắc
+  const theme = {
+    stroke: "#333333",    // Màu nét cắt hộp (Đen xám kỹ thuật)
+    fill: "#ffffff",      // Nền trắng
+    text: "#666666",      // Chữ nhãn nhạt
+    dim: "#ef4444",       // Đỏ kỹ thuật cho đường kích thước
+    dimLine: "#fca5a5",   // Đỏ nhạt cho đường gióng
+    dimText: "#000000"    // Màu chữ số kích thước (Đen)
+  };
+
+  const strokeW = vbW * 0.002;
+  // Giảm font size xuống mức nhỏ, thanh thoát (tương đương 14px trên màn hình)
+  const dimFontSize = Math.max(vbW * 0.015, 0.5); 
+
+  // Dữ liệu đường kích thước dọc (Bên trái)
+  const vBaseX = minX - dimOffset;
+  const vTotalX = vBaseX - dimOffset;
+  const vPoints = [
+    { y: minY, val: taiGai },
+    { y: -Y, val: Y },
+    { y: 0, val: Z },
+    { y: Z, val: Y },
+    { y: Z + Y, val: taiGai },
+    { y: maxY, val: 0 }
+  ];
+
+  // Dữ liệu đường kích thước ngang (Bên dưới)
+  const hBaseY = maxY + dimOffset;
+  const hTotalY = hBaseY + dimOffset;
+  const hPoints = [
+    { x: minX, val: taiDan },
+    { x: 0, val: X },
+    { x: X, val: Y },
+    { x: X + Y, val: X },
+    { x: 2*X + Y, val: Y },
+    { x: maxX, val: 0 }
+  ];
+
+  return (
+    <div className="w-full bg-[#f8f9fa] border border-[#e2e8f0] rounded-xl overflow-hidden mt-4 relative shadow-inner p-4">
+      <div className="absolute top-3 left-4 text-[10px] font-bold text-slate-500 uppercase tracking-widest opacity-80 flex items-center space-x-2">
+        <div className="w-2 h-2 rounded-full bg-red-500"></div>
+        <span>Bản Vẽ Kỹ Thuật (Flat Layout)</span>
+      </div>
+      
+      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[350px] mt-6">
+        
+        {/* VẼ ĐƯỜNG GIÓNG VÀ KÍCH THƯỚC DỌC (TRÁI) */}
+        <g stroke={theme.dim} fill={theme.dim} strokeWidth={strokeW * 0.8} textAnchor="end" dominantBaseline="middle">
+          {/* Đường gióng mờ */}
+          {vPoints.map((pt, i) => (
+            <line key={`vExt${i}`} x1={pt.y >= 0 && pt.y <= Z ? 0 : minX} y1={pt.y} x2={vTotalX - tick} y2={pt.y} stroke={theme.dimLine} strokeWidth={strokeW * 0.5} strokeDasharray="4,4" />
+          ))}
+          
+          {/* Trục dọc chia đoạn */}
+          <line x1={vBaseX} y1={minY} x2={vBaseX} y2={maxY} />
+          {vPoints.map((pt, i) => (
+            <g key={`vTick${i}`}>
+              <line x1={vBaseX - tick} y1={pt.y} x2={vBaseX + tick} y2={pt.y} strokeWidth={strokeW * 1.5} />
+              {i < vPoints.length - 1 && (
+                <text x={vBaseX - tick * 1.5} y={(pt.y + vPoints[i+1].y) / 2} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">{fmt(pt.val)}</text>
+              )}
+            </g>
+          ))}
+
+          {/* Trục dọc tổng */}
+          <line x1={vTotalX} y1={minY} x2={vTotalX} y2={maxY} />
+          <line x1={vTotalX - tick} y1={minY} x2={vTotalX + tick} y2={minY} strokeWidth={strokeW * 1.5} />
+          <line x1={vTotalX - tick} y1={maxY} x2={vTotalX + tick} y2={maxY} strokeWidth={strokeW * 1.5} />
+          <text x={vTotalX - tick * 1.5} y={(minY + maxY) / 2} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">{fmt(maxY - minY)}</text>
+        </g>
+
+        {/* VẼ ĐƯỜNG GIÓNG VÀ KÍCH THƯỚC NGANG (DƯỚI) */}
+        <g stroke={theme.dim} fill={theme.dim} strokeWidth={strokeW * 0.8} textAnchor="middle">
+          {/* Đường gióng mờ */}
+          {hPoints.map((pt, i) => (
+            <line key={`hExt${i}`} x1={pt.x} y1={pt.x >= X+Y && pt.x <= 2*X+Y ? maxY : Z} x2={pt.x} y2={hTotalY + tick} stroke={theme.dimLine} strokeWidth={strokeW * 0.5} strokeDasharray="4,4" />
+          ))}
+
+          {/* Trục ngang chia đoạn */}
+          <line x1={minX} y1={hBaseY} x2={maxX} y2={hBaseY} />
+          {hPoints.map((pt, i) => (
+            <g key={`hTick${i}`}>
+              <line x1={pt.x} y1={hBaseY - tick} x2={pt.x} y2={hBaseY + tick} strokeWidth={strokeW * 1.5} />
+              {i < hPoints.length - 1 && (
+                <text x={(pt.x + hPoints[i+1].x) / 2} y={hBaseY - tick * 1.2} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">{fmt(pt.val)}</text>
+              )}
+            </g>
+          ))}
+
+          {/* Trục ngang tổng */}
+          <line x1={minX} y1={hTotalY} x2={maxX} y2={hTotalY} />
+          <line x1={minX} y1={hTotalY - tick} x2={minX} y2={hTotalY + tick} strokeWidth={strokeW * 1.5} />
+          <line x1={maxX} y1={hTotalY - tick} x2={maxX} y2={hTotalY + tick} strokeWidth={strokeW * 1.5} />
+          <text x={(minX + maxX) / 2} y={hTotalY - tick * 1.2} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">{fmt(maxX - minX)}</text>
+        </g>
+
+        {/* VẼ HÌNH TRẢI PHẲNG (Cải tiến: Nét liền ngoài, Nét đứt trong, Vát mép) */}
+        <g>
+          {/* 1. Nền trắng cho toàn khối */}
+          <path d={outlinePath} fill={theme.fill} stroke="none" />
+          
+          {/* 2. Vẽ các đường bế gân (nét đứt) */}
+          {creaseLines.map((line, i) => (
+            <line 
+              key={`crease-${i}`} 
+              x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} 
+              stroke={theme.stroke} 
+              strokeWidth={strokeW * 0.8} 
+              strokeDasharray={`${strokeW * 3},${strokeW * 3}`} 
+              strokeLinecap="round" 
+            />
+          ))}
+          
+          {/* 3. Vẽ viền bế đứt ngoài cùng (nét liền) */}
+          <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
+          
+          {/* 4. Vẽ chữ nhãn mặt */}
+          {panels.map((p, i) => (
+            p.w > vbW * 0.05 && p.h > vbH * 0.05 ? (
+              <text 
+                key={`label-${i}`}
+                x={p.cx} 
+                y={p.cy} 
+                fill={theme.text} 
+                fontSize={Math.min(vbW * 0.025, p.w * 0.2)} 
+                fontWeight="700" 
+                textAnchor="middle" 
+                dominantBaseline="middle"
+                opacity="0.6"
+              >
+                {p.label}
+              </text>
+            ) : null
+          ))}
+        </g>
+      </svg>
+    </div>
+  );
+}
+
+function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, hopMemDatabase, isLoadingPrices, fetchPaperPrices }) {
+  // --- STATES THÔNG TIN CHUNG ---
+  const [productName, setProductName] = useState('Hộp mỹ phẩm');
+  const [quantity, setQuantity] = useState('1000');
+  const [boxType, setBoxType] = useState('nap_cai_day_khoa');
+  const [boxWidth, setBoxWidth] = useState(''); // Ngang
+  const [boxDepth, setBoxDepth] = useState(''); // Hông
+  const [boxHeight, setBoxHeight] = useState(''); // Cao
+
+  // --- STATES GIẤY & BÌNH BẢN ---
+  const [paperType, setPaperType] = useState('Ivory');
+  const [paperGsm, setPaperGsm] = useState('');
+  const [parentSizeIdx, setParentSizeIdx] = useState('');
+  const [cols, setCols] = useState(''); // Số bát ngang
+  const [rows, setRows] = useState(''); // Số bát dọc
+  const [muonSong, setMuonSong] = useState(false);
+  const [muonNhip, setMuonNhip] = useState(false);
+  const [allowMixed, setAllowMixed] = useState(false);
+
+  // --- STATES IN ẤN ---
+  const [printColors, setPrintColors] = useState(4);
+  const [selectedPrinter, setSelectedPrinter] = useState('');
+
+  // --- STATES GIA CÔNG ---
+  const [lamination, setLamination] = useState('none');
+  
+  const [hasFoil, setHasFoil] = useState(false);
+  const [foilLength, setFoilLength] = useState('');
+  const [foilWidth, setFoilWidth] = useState('');
+  
+  const [hasEmboss, setHasEmboss] = useState(false);
+  const [embossLength, setEmbossLength] = useState('');
+  const [embossWidth, setEmbossWidth] = useState('');
+
+  // --- STATES TÀI CHÍNH ---
+  const [shippingCost, setShippingCost] = useState(0);
+  const [markup, setMarkup] = useState(1.1);
+
+  // --- STATES KẾT QUẢ HIỂN THỊ (Tạm thời) ---
+  const [isCalculated, setIsCalculated] = useState(false);
+
+  // --- DERIVED DATA ---
+  const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
+  const availableGsms = paperDatabase && paperDatabase[paperType] 
+    ? Object.keys(paperDatabase[paperType]).map(Number).sort((a,b)=>a-b) 
+    : [];
+
+  const handleCalculate = () => {
+    // Tạm thời chỉ bật cờ hiển thị giao diện bên phải
+    setIsCalculated(true);
+  };
+
+  return (
+    <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 xl:h-full min-h-0">
+      {/* KHU VỰC TRÁI: FORM NHẬP LIỆU */}
+      <div className="xl:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
+        <h2 className="text-lg font-semibold flex items-center space-x-2 border-b pb-3 shrink-0">
+          <Box size={20} className="text-orange-500"/>
+          <span>Thông Số Hộp Mềm</span>
+        </h2>
+
+        {/* 1. THÔNG TIN CHUNG */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded">1. Thông tin chung</h3>
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Tên sản phẩm</label>
+            <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={productName} onChange={(e) => setProductName(e.target.value)} />
+          </div>
+          
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
+              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Loại hộp</label>
+              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={boxType} onChange={(e) => setBoxType(e.target.value)}>
+                <option value="cai_2_dau">Hộp cài 2 đầu</option>
+                <option value="dan_2_dau">Hộp dán 2 đầu</option>
+                <option value="nap_cai_day_khoa">Hộp nắp cài đáy khoá</option>
+                <option value="nap_cai_day_moc">Nắp cài đáy móc</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2">
+            <label className="text-xs font-bold text-orange-800 uppercase tracking-wider block">Kích thước thành phẩm (cm)</label>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Ngang (X)</label>
+                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 10" value={boxWidth} onChange={(e) => setBoxWidth(e.target.value)}/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Hông (Y)</label>
+                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 5" value={boxDepth} onChange={(e) => setBoxDepth(e.target.value)}/>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-600">Cao (Z)</label>
+                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 15" value={boxHeight} onChange={(e) => setBoxHeight(e.target.value)}/>
+              </div>
+            </div>
+            
+            {/* COMPONENT 3D VIEWER ĐƯỢC THÊM VÀO ĐÂY */}
+            <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
+            
+            {/* COMPONENT BẢN TRẢI PHẲNG (FLAT LAYOUT) */}
+            <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
+          </div>
+        </div>
+
+        {/* 2. VẬT TƯ GIẤY & BÌNH BẢN */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded flex justify-between items-center">
+            <span>2. Vật tư & Bình bản</span>
+            <button onClick={fetchPaperPrices} disabled={isLoadingPrices} className="text-xs flex items-center space-x-1 text-orange-600 hover:text-orange-800 disabled:opacity-50 font-normal">
+              <RefreshCw size={12} className={isLoadingPrices ? "animate-spin" : ""} /><span>Cập nhật</span>
+            </button>
+          </h3>
+          
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); }}>
+                {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Định lượng *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperGsm} onChange={(e) => setPaperGsm(e.target.value === '' ? '' : Number(e.target.value))} disabled={!paperType}>
+                <option value="" disabled hidden>Chọn Đ.Lượng</option>
+                {availableGsms.map(gsm => <option key={gsm} value={gsm}>{gsm}</option>)}
+              </select>
+            </div>
+          </div>
+
+          <div className="space-y-2 pt-1 border-t border-slate-100">
+            <label className="text-sm font-medium text-slate-700">Khổ giấy in (Nguyên khổ) *</label>
+            <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value)}>
+              <option value="" disabled hidden>Chọn khổ giấy in...</option>
+              {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-1">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
+              <input type="number" className="w-full p-2 border border-slate-300 rounded outline-none text-sm" placeholder="Nhập số bát..." value={cols} onChange={(e) => setCols(e.target.value)}/>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
+              <input type="number" className="w-full p-2 border border-slate-300 rounded outline-none text-sm" placeholder="Nhập số bát..." value={rows} onChange={(e) => setRows(e.target.value)}/>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
+            <label className="flex items-center space-x-1.5 cursor-pointer group">
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonSong} onChange={(e) => setMuonSong(e.target.checked)} />
+              <span className="text-sm font-medium text-slate-700">Mượn sông</span>
+            </label>
+            <label className="flex items-center space-x-1.5 cursor-pointer group">
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => setMuonNhip(e.target.checked)} />
+              <span className="text-sm font-medium text-slate-700">Mượn nhíp</span>
+            </label>
+            <label className="flex items-center space-x-1.5 cursor-pointer group">
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={allowMixed} onChange={(e) => setAllowMixed(e.target.checked)} />
+              <span className="text-sm font-medium text-slate-700">Xếp phối hợp (L)</span>
+            </label>
+          </div>
+        </div>
+
+        {/* 3. THÔNG SỐ IN ẤN */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded">3. Thông số in ấn</h3>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số màu in</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={printColors} onChange={(e) => setPrintColors(Number(e.target.value))}>
+                {[1, 2, 3, 4, 5].map(c => <option key={c} value={c}>{c} màu</option>)}
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Chọn máy in</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={selectedPrinter} onChange={(e) => setSelectedPrinter(e.target.value)}>
+                <option value="">Chọn máy...</option>
+                {printerDatabase.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        {/* 4. GIA CÔNG */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded">4. Gia công bao bì</h3>
+          
+          <div className="space-y-1">
+            <label className="text-xs font-medium text-slate-600">Cán màng</label>
+            <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={lamination} onChange={(e) => setLamination(e.target.value)}>
+              {LAMINATION_TYPES.map(l => <option key={l.id} value={l.id}>{l.label}</option>)}
+            </select>
+          </div>
+
+          <div className="pt-2 border-t border-slate-100 space-y-3">
+            {/* Ép nhũ */}
+            <div>
+              <label className="flex items-center space-x-2 cursor-pointer mb-2">
+                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={hasFoil} onChange={(e) => setHasFoil(e.target.checked)} />
+                <span className="text-sm font-bold text-slate-700">Ép nhũ (Foil)</span>
+              </label>
+              {hasFoil && (
+                <div className="grid grid-cols-2 gap-3 pl-6">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Dài nhũ (cm)</label>
+                    <input type="number" step="0.1" className="w-full p-1.5 border border-slate-300 rounded outline-none text-sm" value={foilLength} onChange={(e) => setFoilLength(e.target.value)}/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Rộng nhũ (cm)</label>
+                    <input type="number" step="0.1" className="w-full p-1.5 border border-slate-300 rounded outline-none text-sm" value={foilWidth} onChange={(e) => setFoilWidth(e.target.value)}/>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Thúc nổi */}
+            <div>
+              <label className="flex items-center space-x-2 cursor-pointer mb-2">
+                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={hasEmboss} onChange={(e) => setHasEmboss(e.target.checked)} />
+                <span className="text-sm font-bold text-slate-700">Thúc nổi (Emboss)</span>
+              </label>
+              {hasEmboss && (
+                <div className="grid grid-cols-2 gap-3 pl-6">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Dài thúc (cm)</label>
+                    <input type="number" step="0.1" className="w-full p-1.5 border border-slate-300 rounded outline-none text-sm" value={embossLength} onChange={(e) => setEmbossLength(e.target.value)}/>
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-medium text-slate-500">Rộng thúc (cm)</label>
+                    <input type="number" step="0.1" className="w-full p-1.5 border border-slate-300 rounded outline-none text-sm" value={embossWidth} onChange={(e) => setEmbossWidth(e.target.value)}/>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 5. TỔNG HỢP TÀI CHÍNH */}
+        <div className="space-y-4">
+          <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded">5. Tổng hợp tài chính</h3>
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Vận chuyển (VNĐ)</label>
+              <input type="number" className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm text-right font-medium" value={shippingCost} onChange={(e) => setShippingCost(Number(e.target.value))} />
+            </div>
+            <div className="flex items-center justify-between">
+              <label className="text-sm font-bold text-slate-800">Hệ số lợi nhuận</label>
+              <select className="w-1/2 p-2 bg-emerald-50 border border-emerald-300 text-emerald-800 rounded outline-none font-bold text-right" value={markup} onChange={(e) => setMarkup(Number(e.target.value))}>
+                {MARKUP_RATES.map(m => <option key={m} value={m}>x {m}</option>)}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button 
+          onClick={handleCalculate} 
+          className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-xl transition-colors flex justify-center items-center space-x-2 shadow-sm mt-4 shrink-0"
+        >
+          <Maximize size={18} /><span>Tính toán & Phân trang hộp</span>
+        </button>
+      </div>
+
+      {/* KHU VỰC PHẢI: KẾT QUẢ & BẢN VẼ */}
+      <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
+        {!isCalculated ? (
+          <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px] shrink-0">
+            <Box size={48} className="mb-4 opacity-50 text-orange-400"/>
+            <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Hộp mềm</p>
+            <p className="text-sm mt-1">Nhập đầy đủ thông số bên trái và bấm tính toán để xem bình bản hộp.</p>
+          </div>
+        ) : (
+          <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 h-full min-h-[400px] shrink-0">
+            <Sparkles size={48} className="mb-4 opacity-80"/>
+            <p className="font-bold text-lg mb-2 text-orange-800">Giao diện đã sẵn sàng!</p>
+            <p className="text-sm text-center max-w-md text-orange-700">
+              Bạn hãy cung cấp các công thức và quy tắc ở bước tiếp theo để AI tích hợp logic tính <strong>Kích thước trải, Khuôn bế, Công dán hộp</strong> và vẽ bản vẽ kỹ thuật.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 }
 
 function TuiGiayCalculator() {
@@ -2329,6 +3026,7 @@ export default function App() {
   const [paperDatabase, setPaperDatabase] = useState(null);
   const [printerDatabase, setPrinterDatabase] = useState([]);
   const [finishingDatabase, setFinishingDatabase] = useState([]);
+  const [hopMemDatabase, setHopMemDatabase] = useState([]);
   const [dinhMucDatabase, setDinhMucDatabase] = useState([]);
   const [isLoadingPrices, setIsLoadingPrices] = useState(true);
   const [priceLoadError, setPriceLoadError] = useState('');
@@ -2350,6 +3048,7 @@ export default function App() {
       let rawPapers;
       let rawPrinters;
       let rawFinishing;
+      let rawHopMem;
       let rawDinhMuc;
 
       try {
@@ -2365,11 +3064,13 @@ export default function App() {
            rawPapers = json.papers;
            rawPrinters = json.printers;
            rawFinishing = json.finishing || DEFAULT_FINISHING_DATA;
+           rawHopMem = json.hopMem || [];
            rawDinhMuc = json.dinhMuc || DEFAULT_DINHMUC_DATA;
         } else {
            rawPapers = json.record ? json.record : json; 
            rawPrinters = [];
            rawFinishing = DEFAULT_FINISHING_DATA;
+           rawHopMem = [];
            rawDinhMuc = DEFAULT_DINHMUC_DATA;
         }
 
@@ -2377,6 +3078,7 @@ export default function App() {
         rawPapers = DEFAULT_PAPER_DATA;
         rawPrinters = DEFAULT_PRINTER_DATA;
         rawFinishing = DEFAULT_FINISHING_DATA;
+        rawHopMem = [];
         rawDinhMuc = DEFAULT_DINHMUC_DATA;
         setPriceLoadError(fetchError.message || 'Mất kết nối. Đang dùng bảng giá dự phòng.');
       }
@@ -2412,6 +3114,8 @@ export default function App() {
       } else {
         setFinishingDatabase(DEFAULT_FINISHING_DATA);
       }
+      
+      setHopMemDatabase(rawHopMem);
 
       if (rawDinhMuc && rawDinhMuc.length > 0) {
         setDinhMucDatabase(rawDinhMuc);
@@ -2435,7 +3139,7 @@ export default function App() {
       case 'toroi': return <ToRoiCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} priceLoadError={priceLoadError} fetchPaperPrices={fetchPaperPrices} />;
       case 'catalogue': return <CatalogueCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
       case 'vo': return <VoCalculator />;
-      case 'hopmem': return <HopMemCalculator />;
+      case 'hopmem': return <HopMemCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} hopMemDatabase={hopMemDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
       case 'tuigiay': return <TuiGiayCalculator />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
