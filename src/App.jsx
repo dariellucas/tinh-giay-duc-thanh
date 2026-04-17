@@ -3328,9 +3328,9 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
               <Sparkles size={48} className="mb-4 opacity-80"/>
-              <p className="font-bold text-lg mb-2 text-orange-800">Giao diện đã sẵn sàng!</p>
+              <p className="font-bold text-lg mb-2 text-orange-800">Content</p>
               <p className="text-sm text-center max-w-md text-orange-700">
-                Bạn hãy cung cấp các công thức và quy tắc ở bước tiếp theo để AI tích hợp logic tính <strong>Kích thước trải, Khuôn bế, Công dán hộp</strong> và báo giá nhé.
+                Section chờ.
               </p>
             </div>
           </>
