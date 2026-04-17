@@ -2347,7 +2347,7 @@ function Box3DViewer({ width, depth, height }) {
 // ==========================================
 // TÍNH TOÁN HÌNH HỌC HỘP MỀM
 // ==========================================
-function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
+function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false) {
   const getBoxConfig = (w, db) => {
     const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
     if (!db || !Array.isArray(db) || db.length === 0) return fallback;
@@ -2381,12 +2381,11 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   let creaseLines = [];
   let panels = [];
   let vPoints = [];
+  let minX = -taiDan;
+  let maxX = 2*X + 2*Y;
   let minY = 0, maxY = 0;
   let overlapX = 0; // Thêm biến lưu khoảng cách lồng ghép ngang
   let overlapY = 0; // Thêm biến lưu khoảng cách lồng ghép dọc
-
-  const minX = -taiDan;
-  const maxX = 2*X + 2*Y;
 
   // LỰA CHỌN CẤU TRÚC HỘP
   if (boxType === 'cai_2_dau') {
@@ -2548,76 +2547,136 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     overlapY = 0; // Đáy khóa chiếm toàn bộ biên dưới, xếp mép chạm mép tương tự hộp dán 2 đầu
     overlapX = 0;
 
-    outlinePath = `
-      M 0 0
-      L 0 ${-Y}
-      L ${c} ${-Y - taiGai}
-      L ${X - c} ${-Y - taiGai}
-      L ${X} ${-Y}
-      L ${X} 0
-      L ${X + c} ${-taiPhuH}
-      L ${X + Y - c} ${-taiPhuH}
-      L ${X + Y} 0
-      L ${2*X + Y} 0
-      L ${2*X + Y + c} ${-taiPhuH}
-      L ${2*X + 2*Y - c} ${-taiPhuH}
-      L ${2*X + 2*Y} 0
-      L ${2*X + 2*Y} ${Z}
-      L ${2*X + 2*Y - c} ${Z + dayKhoaH}
-      L ${2*X + Y + c} ${Z + dayKhoaH}
-      L ${2*X + Y} ${Z}
-      L ${2*X + Y} ${Z + dayKhoaH}
-      L ${X + Y} ${Z + dayKhoaH}
-      L ${X + Y} ${Z}
-      L ${X + Y - c} ${Z + dayKhoaH}
-      L ${X + c} ${Z + dayKhoaH}
-      L ${X} ${Z}
-      L ${X} ${Z + dayKhoaH}
-      L 0 ${Z + dayKhoaH}
-      L 0 ${Z}
-      L ${-taiDan} ${Z - c}
-      L ${-taiDan} ${c}
-      Z
-    `;
+    if (isDaoTaiDan) {
+      // BẢN VẼ BIẾN THỂ: ĐẢO TAI DÁN & DỊCH CHUYỂN HÔNG
+      // Trật tự mới: [Hông 2] - [Mặt Trước] - [Hông 1] - [Mặt Sau] - [Tai Dán]
+      minX = 0;
+      maxX = 2*X + 2*Y + taiDan;
+      
+      outlinePath = `
+        M 0 0
+        L ${c} ${-taiPhuH}
+        L ${Y - c} ${-taiPhuH}
+        L ${Y} 0
+        L ${Y} ${-Y}
+        L ${Y + c} ${-Y - taiGai}
+        L ${Y + X - c} ${-Y - taiGai}
+        L ${Y + X} ${-Y}
+        L ${Y + X} 0
+        L ${Y + X + c} ${-taiPhuH}
+        L ${2*Y + X - c} ${-taiPhuH}
+        L ${2*Y + X} 0
+        L ${2*Y + 2*X} 0
+        L ${2*Y + 2*X + taiDan} ${c}
+        L ${2*Y + 2*X + taiDan} ${Z - c}
+        L ${2*Y + 2*X} ${Z}
+        L ${2*Y + 2*X} ${Z + dayKhoaH}
+        L ${2*Y + X} ${Z + dayKhoaH}
+        L ${2*Y + X} ${Z}
+        L ${2*Y + X - c} ${Z + dayKhoaH}
+        L ${Y + X + c} ${Z + dayKhoaH}
+        L ${Y + X} ${Z}
+        L ${Y + X} ${Z + dayKhoaH}
+        L ${Y} ${Z + dayKhoaH}
+        L ${Y} ${Z}
+        L ${Y - c} ${Z + dayKhoaH}
+        L ${c} ${Z + dayKhoaH}
+        L 0 ${Z}
+        Z
+      `;
 
-    creaseLines = [
-      { x1: 0, y1: 0, x2: 0, y2: Z }, 
-      { x1: X, y1: 0, x2: X, y2: Z }, 
-      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
-      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
-      { x1: 0, y1: 0, x2: X, y2: 0 }, 
-      { x1: 0, y1: -Y, x2: X, y2: -Y }, 
-      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
-      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
-      { x1: 0, y1: Z, x2: X, y2: Z }, 
-      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
-      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
-      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
-    ];
+      creaseLines = [
+        { x1: Y, y1: 0, x2: Y, y2: Z }, 
+        { x1: Y + X, y1: 0, x2: Y + X, y2: Z }, 
+        { x1: 2*Y + X, y1: 0, x2: 2*Y + X, y2: Z }, 
+        { x1: 2*Y + 2*X, y1: 0, x2: 2*Y + 2*X, y2: Z }, 
+        { x1: 0, y1: 0, x2: Y, y2: 0 }, 
+        { x1: Y, y1: 0, x2: Y + X, y2: 0 }, 
+        { x1: Y + X, y1: 0, x2: 2*Y + X, y2: 0 }, 
+        { x1: 2*Y + X, y1: 0, x2: 2*Y + 2*X, y2: 0 }, 
+        { x1: Y, y1: -Y, x2: Y + X, y2: -Y }, 
+        { x1: 0, y1: Z, x2: Y, y2: Z }, 
+        { x1: Y, y1: Z, x2: Y + X, y2: Z }, 
+        { x1: Y + X, y1: Z, x2: 2*Y + X, y2: Z }, 
+        { x1: 2*Y + X, y1: Z, x2: 2*Y + 2*X, y2: Z }  
+      ];
+      
+      panels = [];
+      vPoints = [];
 
-    panels = [
-      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
-      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
-      { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
-      { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
-      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
-      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-      { cx: X + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' },
-      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
-      { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
-      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-      { cx: 2*X + Y + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' }
-    ];
+    } else {
+      // BẢN VẼ TIÊU CHUẨN
+      outlinePath = `
+        M 0 0
+        L 0 ${-Y}
+        L ${c} ${-Y - taiGai}
+        L ${X - c} ${-Y - taiGai}
+        L ${X} ${-Y}
+        L ${X} 0
+        L ${X + c} ${-taiPhuH}
+        L ${X + Y - c} ${-taiPhuH}
+        L ${X + Y} 0
+        L ${2*X + Y} 0
+        L ${2*X + Y + c} ${-taiPhuH}
+        L ${2*X + 2*Y - c} ${-taiPhuH}
+        L ${2*X + 2*Y} 0
+        L ${2*X + 2*Y} ${Z}
+        L ${2*X + 2*Y - c} ${Z + dayKhoaH}
+        L ${2*X + Y + c} ${Z + dayKhoaH}
+        L ${2*X + Y} ${Z}
+        L ${2*X + Y} ${Z + dayKhoaH}
+        L ${X + Y} ${Z + dayKhoaH}
+        L ${X + Y} ${Z}
+        L ${X + Y - c} ${Z + dayKhoaH}
+        L ${X + c} ${Z + dayKhoaH}
+        L ${X} ${Z}
+        L ${X} ${Z + dayKhoaH}
+        L 0 ${Z + dayKhoaH}
+        L 0 ${Z}
+        L ${-taiDan} ${Z - c}
+        L ${-taiDan} ${c}
+        Z
+      `;
 
-    vPoints = [
-      { y: minY, val: taiGai },
-      { y: -Y, val: Y },
-      { y: 0, val: Z },
-      { y: Z, val: dayKhoaH },
-      { y: maxY, val: 0 }
-    ];
+      creaseLines = [
+        { x1: 0, y1: 0, x2: 0, y2: Z }, 
+        { x1: X, y1: 0, x2: X, y2: Z }, 
+        { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+        { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+        { x1: 0, y1: 0, x2: X, y2: 0 }, 
+        { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+        { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+        { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+        { x1: 0, y1: Z, x2: X, y2: Z }, 
+        { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+        { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+        { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+      ];
+
+      panels = [
+        { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+        { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+        { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+        { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+        { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+        { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+        { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+        { cx: X + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' },
+        { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+        { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+        { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+        { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+        { cx: 2*X + Y + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' }
+      ];
+
+      vPoints = [
+        { y: minY, val: taiGai },
+        { y: -Y, val: Y },
+        { y: 0, val: Z },
+        { y: Z, val: dayKhoaH },
+        { y: maxY, val: 0 }
+      ];
+    }
   } else if (boxType === 'nap_cai_day_moc') {
     const dayKhoaH = Y / 2 + taiGai;
     const taiDayH = dayKhoaH * 0.75; // 75% height của đáy theo yêu cầu
@@ -2857,7 +2916,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, daoTaiDan }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -2867,10 +2926,12 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
   if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return null;
 
-  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
-  if (!geom) return null;
+  // Lấy cả 2 biến thể hình học (Tiêu chuẩn và Đảo tai dán)
+  const geomNormal = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, false);
+  const geomDao = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, true);
+  if (!geomNormal) return null;
 
-  const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY } = geom;
+  const { minX, maxX, minY, maxY, overlapX, overlapY } = geomNormal;
   
   const singleW = maxX - minX;
   const singleH = maxY - minY;
@@ -2917,15 +2978,21 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
         {/* Lặp Lưới Vẽ Các Bát */}
         {Array.from({length: cRows}).map((_, r) => (
           Array.from({length: cCols}).map((_, col) => {
-            const tx = col * stepW - minX;
-            const ty = r * stepH - minY;
             const batId = r * cCols + col + 1;
             
             // Logic lật bát: Mirror Horizontal + Mirror Vertical = Xoay 180 độ
-            // Áp dụng xếp quay đầu cho hộp Nắp cài đáy khóa ở hàng chẵn (ví dụ: hàng 0 là bát số 1)
+            // Áp dụng xếp quay đầu cho hộp Nắp cài đáy khóa ở hàng chẵn
             const isFlipped = boxType === 'nap_cai_day_khoa' && cRows > 1 && r % 2 === 0;
-            const cx = (minX + maxX) / 2;
-            const cy = (minY + maxY) / 2;
+            
+            // Nếu là bát bị lật xoay và có tick "Đảo tai dán" -> Dùng bản vẽ geomDao
+            const useDaoTaiDan = daoTaiDan && isFlipped && boxType === 'nap_cai_day_khoa';
+            const currentGeom = useDaoTaiDan && geomDao ? geomDao : geomNormal;
+
+            const tx = col * stepW - currentGeom.minX;
+            const ty = r * stepH - currentGeom.minY;
+
+            const cx = (currentGeom.minX + currentGeom.maxX) / 2;
+            const cy = (currentGeom.minY + currentGeom.maxY) / 2;
             
             // Xoay group chứa bát 180 độ quanh tâm của nó
             const transformGroup = isFlipped 
@@ -2939,8 +3006,8 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
             return (
               <g transform={transformGroup} key={`box-${r}-${col}`}>
-                <path d={outlinePath} fill={theme.fill} stroke="none" />
-                {creaseLines.map((line, i) => (
+                <path d={currentGeom.outlinePath} fill={theme.fill} stroke="none" />
+                {currentGeom.creaseLines.map((line, i) => (
                   <line 
                     key={`crease-${i}`} 
                     x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} 
@@ -2949,7 +3016,7 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
                     strokeDasharray={`${strokeW * 3},${strokeW * 3}`} 
                   />
                 ))}
-                <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
+                <path d={currentGeom.outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
                 <text x={cx} y={cy} transform={transformText} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
                   {batId}
                 </text>
@@ -3256,7 +3323,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} />
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
