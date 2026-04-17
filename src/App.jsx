@@ -2466,6 +2466,8 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   let panels = [];
   let vPoints = [];
   let minY = 0, maxY = 0;
+  let overlapX = 0; // Thêm biến lưu khoảng cách lồng ghép ngang
+  let overlapY = 0; // Thêm biến lưu khoảng cách lồng ghép dọc
 
   const minX = -taiDan;
   const maxX = 2*X + 2*Y;
@@ -2474,6 +2476,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   if (boxType === 'cai_2_dau') {
     minY = -Y - taiGai;
     maxY = Z + Y + taiGai;
+    overlapY = Y + taiGai; // Lồng nắp trên vào khoảng trống mặt trước của đáy trên
 
     outlinePath = `
       M 0 0
@@ -2550,6 +2553,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   } else if (boxType === 'dan_2_dau') {
     minY = -Y;
     maxY = Z + Y;
+    overlapY = Y; // Hộp dán 2 đầu lồng phần nắp dán
 
     outlinePath = `
       M 0 0
@@ -2624,6 +2628,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     const dayKhoaH = Y / 2 + taiGai;
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
+    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
 
     outlinePath = `
       M 0 0
@@ -2700,6 +2705,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     const taiDayH = dayKhoaH * 0.75; // 75% height của đáy theo yêu cầu
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
+    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
 
     outlinePath = `
       M 0 0
@@ -2784,7 +2790,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     { x: maxX, val: 0 }
   ];
 
-  return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY };
+  return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY, overlapX, overlapY };
 }
 
 // ==========================================
@@ -2932,7 +2938,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -2945,14 +2951,18 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
   if (!geom) return null;
 
-  const { outlinePath, creaseLines, minX, maxX, minY, maxY } = geom;
+  const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY } = geom;
   
   const singleW = maxX - minX;
   const singleH = maxY - minY;
-  const gap = 0.5; // Khoảng cách khe hở giữa các hộp (cm)
+  const gap = muonSong ? 0 : 0.4; // Khoảng cách khe hở giữa các hộp (cm) - Nếu mượn sông thì gap = 0
 
-  const totalW = cCols * singleW + (cCols - 1) * gap;
-  const totalH = cRows * singleH + (cRows - 1) * gap;
+  // Tính toán bước nhảy (stride) có tính đến lồng ghép âm
+  const stepW = singleW - overlapX + gap;
+  const stepH = singleH - overlapY + gap;
+
+  const totalW = singleW + (cCols - 1) * stepW;
+  const totalH = singleH + (cRows - 1) * stepH;
 
   const pad = Math.max(totalW, totalH) * 0.1;
   const vbX = -pad;
@@ -2988,8 +2998,8 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
         {/* Lặp Lưới Vẽ Các Bát */}
         {Array.from({length: cRows}).map((_, r) => (
           Array.from({length: cCols}).map((_, col) => {
-            const tx = col * (singleW + gap) - minX;
-            const ty = r * (singleH + gap) - minY;
+            const tx = col * stepW - minX;
+            const ty = r * stepH - minY;
             const batId = r * cCols + col + 1;
             return (
               <g transform={`translate(${tx}, ${ty})`} key={`box-${r}-${col}`}>
@@ -3303,7 +3313,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} />
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
