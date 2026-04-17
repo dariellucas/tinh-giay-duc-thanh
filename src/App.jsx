@@ -2920,8 +2920,25 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
             const tx = col * stepW - minX;
             const ty = r * stepH - minY;
             const batId = r * cCols + col + 1;
+            
+            // Logic lật bát: Mirror Horizontal + Mirror Vertical = Xoay 180 độ
+            // Áp dụng xếp quay đầu cho hộp Nắp cài đáy khóa ở hàng chẵn (ví dụ: hàng 0 là bát số 1)
+            const isFlipped = boxType === 'nap_cai_day_khoa' && cRows > 1 && r % 2 === 0;
+            const cx = (minX + maxX) / 2;
+            const cy = (minY + maxY) / 2;
+            
+            // Xoay group chứa bát 180 độ quanh tâm của nó
+            const transformGroup = isFlipped 
+              ? `translate(${tx}, ${ty}) rotate(180, ${cx}, ${cy})` 
+              : `translate(${tx}, ${ty})`;
+            
+            // Xoay ngược lại con số bên trong để không bị đọc lộn ngược
+            const transformText = isFlipped 
+              ? `rotate(180, ${cx}, ${cy})` 
+              : "";
+
             return (
-              <g transform={`translate(${tx}, ${ty})`} key={`box-${r}-${col}`}>
+              <g transform={transformGroup} key={`box-${r}-${col}`}>
                 <path d={outlinePath} fill={theme.fill} stroke="none" />
                 {creaseLines.map((line, i) => (
                   <line 
@@ -2933,7 +2950,7 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
                   />
                 ))}
                 <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
-                <text x={(minX+maxX)/2} y={(minY+maxY)/2} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                <text x={cx} y={cy} transform={transformText} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
                   {batId}
                 </text>
               </g>
