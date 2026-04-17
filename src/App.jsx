@@ -1,163 +1,79 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { 
-  Settings, Maximize, Printer, Layout, AlertCircle, 
-  FileText, X, Copy, Check, RefreshCw, BookOpen, Book, 
-  Box, ShoppingBag, Mail, StickyNote, Sparkles, Layers,
-  ChevronDown, ChevronRight
-} from 'lucide-react';
+import { Settings, RefreshCw, AlertCircle, Maximize, Layout, FileText, Printer, BookOpen, Layers, Book, Box, ShoppingBag, Mail, StickyNote, Sparkles } from 'lucide-react';
 
-// ==========================================
-// CONSTANTS & DỮ LIỆU CƠ BẢN
-// ==========================================
-const GOOGLE_SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxG6_SjHC3__zrbNV2s5wTr2ngrj_4Az1xcxhpe9xR-KSowPMnwcKF_ro5s3Le-J0/exec'; 
-
-const DEFAULT_PAPER_DATA = [
-  { paperType: "Couche", gsm: 80, price: 22.4, rolls: "62; 65; 72; 79; 86; 109" }, 
-  { paperType: "Couche", gsm: 100, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 120, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 150, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 180, price: 20.8, rolls: "62; 86" }, 
-  { paperType: "Couche", gsm: 200, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 230, price: 20.8, rolls: "79; 109" }, 
-  { paperType: "Couche", gsm: 250, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 300, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" }, 
-  { paperType: "Couche Matt", gsm: 100, price: 20.8 },
-  { paperType: "Couche Matt", gsm: 120, price: 20.8 },
-  { paperType: "Off", gsm: 200, price: 26.0 }, { paperType: "Off", gsm: 250, price: 26.0 },
-  { paperType: "Ivory", gsm: 210, price: 18.7 }, { paperType: "Ivory", gsm: 230, price: 17.7 },
-  { paperType: "Ivory", gsm: 250, price: 17.7 }, { paperType: "Ivory", gsm: 300, price: 17.7 },
-  { paperType: "Ivory", gsm: 350, price: 17.7 }, { paperType: "Ivory", gsm: 400, price: 17.7 },
-  { paperType: "Duplex", gsm: 250, price: 17.0 }, { paperType: "Duplex", gsm: 270, price: 17.0 },
-  { paperType: "Duplex", gsm: 300, price: 15.8 }, { paperType: "Duplex", gsm: 310, price: 15.8 },
-  { paperType: "Duplex", gsm: 350, price: 15.3 }, { paperType: "Duplex", gsm: 400, price: 15.3 },
-  { paperType: "Duplex", gsm: 450, price: 15.3 }, { paperType: "Kraft trắng", gsm: 100, price: 30.7 },
-  { paperType: "Kraft trắng", gsm: 120, price: 30.7 }, { paperType: "Kraft nâu", gsm: 170, price: 13.6 },
-  { paperType: "Kraft nâu", gsm: 250, price: 17.0 }, { paperType: "Kraft nâu", gsm: 280, price: 17.0 },
-  { paperType: "Kraft nâu", gsm: 300, price: 17.0 }, { paperType: "Kraft nâu", gsm: 350, price: 17.0 },
-  { paperType: "Bãi Bằng", gsm: 60, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 70, price: 25.5 },
-  { paperType: "Bãi Bằng", gsm: 80, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 100, price: 25.5 }
-];
-
-const DEFAULT_PRINTER_DATA = [
-  { id: 'fallback_1', name: '65x86', platePrice: 100000, runPrice: 500000 },
-  { id: 'fallback_2', name: '52x72', platePrice: 80000, runPrice: 400000 },
-  { id: 'fallback_3', name: '72x102', platePrice: 150000, runPrice: 800000 }
-];
-
-const DEFAULT_FINISHING_DATA = [
-  { item: 'Xả lô', price: 0, unit: 'VNĐ / 1 bài', minPrice: 150000 },
-  { item: 'Cán mờ', price: 0.25, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
-  { item: 'Cán bóng', price: 0.23, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
-  { item: 'Gấp vạch', price: 15, unit: 'VNĐ / 1 vạch / 1 tờ', minPrice: 200000 },
-  { item: 'Xén', price: 30000, unit: 'VNĐ / 1 ream', minPrice: 80000 },
-  { item: 'Ghim gáy', price: 15, unit: 'VNĐ / 1 trang', minPrice: 600000 },
-  { item: 'Keo gáy', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1000000 },
-  { item: 'Khâu keo', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1500000 },
-  { item: 'Gáy lò xo A4', price: 4500, unit: 'VNĐ / 1 quyển', minPrice: 300000 },
-  { item: 'Gáy lò xo A5', price: 3500, unit: 'VNĐ / 1 quyển', minPrice: 300000 }
-];
-
-const DEFAULT_DINHMUC_DATA = [
-  { category: 'In', fromQty: 1, toQty: 5000, name: 'Ít', spoilage: 100, unit: 'Tờ in' },
-  { category: 'In', fromQty: 5001, toQty: 7000, name: 'Trung bình', spoilage: 150, unit: 'Tờ in' },
-  { category: 'In', fromQty: 7001, toQty: 10000, name: 'Nhiều', spoilage: 200, unit: 'Tờ in' },
-  { category: 'In', fromQty: 10001, toQty: 9999999999, name: 'Rất nhiều', spoilage: 300, unit: 'Tờ in' }
-];
-
-const PARENT_PAPER_SIZES = [
-  "27 x 52", "36.3 x 39.5", "36 x 52", "32.5 x 43", 
-  "39.5 x 54.5", "43 x 62", "43 x 65", "52 x 72", 
-  "54.5 x 79", "62 x 86", "65 x 86", "72 x 102", "79 x 109"
-].map(size => {
-  const [a, b] = size.split('x').map(s => parseFloat(s.trim()));
-  return { label: size, w: Math.max(a, b), h: Math.min(a, b) };
-});
-
+const GOOGLE_SHEETS_API_URL = '';
 const PRODUCT_SIZES = [
-  { label: 'A3 (42 x 29.7)', w: 42, h: 29.7 },
-  { label: 'A4 (29.7 x 21)', w: 29.7, h: 21 },
-  { label: 'A5 (21 x 14.8)', w: 21, h: 14.8 },
-  { label: 'Kích thước khác', w: 0, h: 0 }
+  { label: 'A4 (21x29.7)', w: 21, h: 29.7 },
+  { label: 'A5 (14.8x21)', w: 14.8, h: 21 },
+  { label: 'Tùy chỉnh...', w: 0, h: 0 }
 ];
-
-const KHO_THIEU_SIZES = {
-  0: { w: 41.8, h: 29.7, label: 'A3 thiếu (41.8 x 29.7)' },
-  1: { w: 29.7, h: 20.7, label: 'A4 thiếu (29.7 x 20.7)' },
-  2: { w: 20.7, h: 14.8, label: 'A5 thiếu (20.7 x 14.8)' },
-};
-
+const KHO_THIEU_SIZES = [
+  { label: 'A4 thiếu (20x29)', w: 20, h: 29 },
+  { label: 'A5 thiếu (14.5x20)', w: 14.5, h: 20 },
+  null
+];
+const PARENT_PAPER_SIZES = [
+  { label: '65 x 86 cm', w: 65, h: 86 },
+  { label: '60 x 84 cm', w: 60, h: 84 },
+  { label: '79 x 109 cm', w: 79, h: 109 }
+];
 const LAMINATION_TYPES = [
   { id: 'none', label: 'Không cán' },
   { id: 'matte', label: 'Cán mờ' },
-  { id: 'glossy', label: 'Cán bóng' }
+  { id: 'gloss', label: 'Cán bóng' }
 ];
-
-const MARKUP_RATES = [
-  1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8
-];
-
+const MARKUP_RATES = [1.0, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5];
 const BINDING_TYPES = [
   { id: 'ghim', label: 'Ghim gáy' },
   { id: 'keo', label: 'Keo gáy' },
   { id: 'khau', label: 'Khâu keo' },
   { id: 'loxo', label: 'Gáy lò xo' }
 ];
-
+const DEFAULT_PAPER_DATA = {};
+const DEFAULT_PRINTER_DATA = [];
+const DEFAULT_FINISHING_DATA = [];
+const DEFAULT_DINHMUC_DATA = [];
 
 // ==========================================
-// THÀNH PHẦN CANVAS BẢN VẼ (Cho Tờ Rơi)
+// COMPONENT VẼ BẢN IN (CANVAS TỜ RỜI)
 // ==========================================
 function ImpositionCanvas({ result }) {
   if (!result) return null;
-  const { parentW, parentH, blocks, gap, gripper, impositionStyle, printSides, topMargin } = result;
-  const MARGIN = 0.2; const GAP = gap; const GRIPPER = gripper;
+  const { parentW, parentH, blocks, gripper, topMargin } = result;
+  const MARGIN = 0.2;
   const padding = Math.max(parentW, parentH) * 0.05;
-  const viewBox = `-${padding} -${padding} ${parentW + padding*2} ${parentH + padding*2}`;
-
+  const strokeW = Math.max(parentW, parentH) * 0.002;
+  const fontSize = Math.max(parentW, parentH) * 0.025;
+  const hasTopGripper = gripper > 0;
   const items = [];
-  blocks.forEach((block, bIdx) => {
-    for (let r = 0; r < block.rows; r++) {
-      for (let c = 0; c < block.cols; c++) {
-        let sideLabel = 'A';
-        if (printSides === 2) {
-          if (impositionStyle === 'Trở nó') {
-            sideLabel = c < block.cols / 2 ? 'A' : 'B';
-          } else if (impositionStyle === 'Trở lật') {
-            sideLabel = r < block.rows / 2 ? 'A' : 'B';
-          }
-        }
-        
-        items.push({
-          x: MARGIN + block.x + c * (block.w + GAP), 
-          y: topMargin + block.y + r * (block.h + GAP), 
-          w: block.w, h: block.h,
-          id: `item-${bIdx}-${r}-${c}`, 
-          isFirstInBlock: r === 0 && c === 0,
-          sideLabel: sideLabel
-        });
+  
+  blocks.forEach(block => {
+    for (let c = 0; c < block.cols; c++) {
+      for (let r = 0; r < block.rows; r++) {
+         items.push({
+           id: `${block.x}-${block.y}-${c}-${r}`,
+           x: block.x + c * (block.w + result.gap) + MARGIN,
+           y: block.y + r * (block.h + result.gap) + topMargin,
+           w: block.w,
+           h: block.h,
+           sideLabel: 'Mặt In',
+           isFirstInBlock: c === 0 && r === 0
+         });
       }
     }
   });
 
-  const fontSize = Math.max(parentW, parentH) * 0.025;
-  const strokeW = Math.max(parentW, parentH) * 0.002;
-  const hasTopGripper = printSides === 2 && impositionStyle === 'Trở lật' && GRIPPER > 0;
-
   return (
-    <svg className="w-full h-full max-h-[600px] drop-shadow-md" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
+    <svg viewBox={`-${padding} -${padding} ${parentW + padding*2} ${parentH + padding*2}`} className="w-full h-auto drop-shadow-md bg-white">
       <rect x={0} y={0} width={parentW} height={parentH} fill="#ffffff" stroke="#94a3b8" strokeWidth={strokeW * 2} />
-      
-      {GRIPPER > 0 && (
-        <><rect x={0} y={parentH - GRIPPER} width={parentW} height={GRIPPER} fill="#1e293b" opacity="0.8"/>
-          <text x={parentW / 2} y={parentH - (GRIPPER/2)} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle">NHÍP ({GRIPPER * 10}mm)</text></>
-      )}
-
       {hasTopGripper && (
-        <><rect x={0} y={0} width={parentW} height={GRIPPER} fill="#1e293b" opacity="0.8"/>
-          <text x={parentW / 2} y={GRIPPER/2} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle" transform={`rotate(180, ${parentW/2}, ${GRIPPER/2})`}>NHÍP ({GRIPPER * 10}mm)</text></>
+        <g>
+          <rect x={0} y={0} width={parentW} height={gripper} fill="#1e293b" opacity="0.8"/>
+          <text x={parentW / 2} y={gripper/2} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle" transform={`rotate(180, ${parentW/2}, ${gripper/2})`}>NHÍP ({gripper * 10}mm)</text>
+        </g>
       )}
 
-      <rect x={MARGIN} y={topMargin} width={parentW - (MARGIN*2)} height={parentH - topMargin - (GRIPPER > 0 ? GRIPPER : MARGIN)} fill="none" stroke="#fca5a5" strokeWidth={strokeW} strokeDasharray={`${strokeW*4},${strokeW*4}`} />
+      <rect x={MARGIN} y={topMargin} width={parentW - (MARGIN*2)} height={parentH - topMargin - (gripper > 0 ? gripper : MARGIN)} fill="none" stroke="#fca5a5" strokeWidth={strokeW} strokeDasharray={`${strokeW*4},${strokeW*4}`} />
       
       {items.map(item => (
         <g key={item.id}>
@@ -1337,7 +1253,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
 
   const handleCalculate = () => {
     if (!productTypeIdx || !quantity || !totalPages || !isPagesValid) {
-      setError('Vui lòng điền đầy đủ và chính xác thông tin chung (Số trang phải chia hết cho 4).');
+      setError('Vui lòng điền đầy đủ và chính xác thông vị chung (Số trang phải chia hết cho 4).');
       setResult(null);
       return;
     }
@@ -2553,7 +2469,8 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   } else if (boxType === 'dan_2_dau') {
     minY = -Y;
     maxY = Z + Y;
-    overlapY = Y; // Hộp dán 2 đầu lồng phần nắp dán
+    overlapY = 0; // Hộp dán 2 đầu xếp mép chạm mép theo chiều dọc
+    overlapX = 0; 
 
     outlinePath = `
       M 0 0
@@ -2628,7 +2545,8 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     const dayKhoaH = Y / 2 + taiGai;
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
-    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
+    overlapY = 0; // Đáy khóa chiếm toàn bộ biên dưới, xếp mép chạm mép tương tự hộp dán 2 đầu
+    overlapX = 0;
 
     outlinePath = `
       M 0 0
@@ -2705,7 +2623,8 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
     const taiDayH = dayKhoaH * 0.75; // 75% height của đáy theo yêu cầu
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
-    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
+    overlapY = 0; // Đáy móc chiếm toàn bộ biên dưới, xếp mép chạm mép tương tự hộp dán 2 đầu
+    overlapX = 0;
 
     outlinePath = `
       M 0 0
