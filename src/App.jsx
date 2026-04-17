@@ -2977,6 +2977,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [parentSizeIdx, setParentSizeIdx] = useState('');
   const [cols, setCols] = useState(1); // Số bát ngang
   const [rows, setRows] = useState(1); // Số bát dọc
+  const [daoTaiDan, setDaoTaiDan] = useState(false); // Đảo tai dán
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
   const [allowMixed, setAllowMixed] = useState(false);
@@ -3080,7 +3081,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             </button>
           </h3>
           
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-3 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
@@ -3088,6 +3089,12 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
+            </div>
+            <div className="flex items-end pb-2">
+              <label className="flex items-center space-x-1.5 cursor-pointer group">
+                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 cursor-pointer" checked={daoTaiDan} onChange={(e) => setDaoTaiDan(e.target.checked)} />
+                <span className="text-sm font-medium text-slate-700 group-hover:text-orange-600 transition-colors">Đảo tai dán</span>
+              </label>
             </div>
           </div>
 
