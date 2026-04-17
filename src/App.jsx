@@ -2429,22 +2429,9 @@ function Box3DViewer({ width, depth, height }) {
 }
 
 // ==========================================
-// COMPONENT VẼ TRẢI PHẲNG (FLAT LAYOUT SVG)
+// TÍNH TOÁN HÌNH HỌC HỘP MỀM
 // ==========================================
-function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
-  const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
-  const X = safeParse(width);
-  const Y = safeParse(depth);
-  const Z = safeParse(height);
-
-  if (X <= 0 || Y <= 0 || Z <= 0) {
-    return null; // Không vẽ nếu chưa nhập đủ kích thước
-  }
-
-  // Hàm làm tròn số hiển thị trên đường kích thước
-  const fmt = (num) => Number(Math.abs(num).toFixed(2));
-
-  // --- HÀM TRA CỨU SHEET HOPMEM ---
+function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   const getBoxConfig = (w, db) => {
     const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
     if (!db || !Array.isArray(db) || db.length === 0) return fallback;
@@ -2472,18 +2459,6 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   
   const thuGoc = 0.2;
   const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
-
-  if (boxType !== 'cai_2_dau' && boxType !== 'dan_2_dau' && boxType !== 'nap_cai_day_khoa' && boxType !== 'nap_cai_day_moc') {
-    return (
-      <div className="w-full h-auto p-10 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 mt-2 text-center min-h-[300px]">
-        <Box size={40} className="mb-3 opacity-50 text-orange-400" />
-        <span className="text-lg font-semibold mb-1">Chưa có dữ liệu vẽ trải phẳng</span>
-        <span className="text-sm">Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong>, <strong>"Hộp dán 2 đầu"</strong>, <strong>"Hộp nắp cài đáy khoá"</strong> hoặc <strong>"Hộp nắp cài đáy móc"</strong> để xem cấu trúc</span>
-      </div>
-    );
-  }
-
-  // --- TỌA ĐỘ VÀ ĐƯỜNG BẾ (CẮT ĐỨT / BẾ GÂN) ---
   const c = thuGoc; // Độ vát góc (chamfer) cho các tai gài, tai dán
 
   let outlinePath = "";
@@ -2796,9 +2771,10 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
       { y: Z, val: dayKhoaH },
       { y: maxY, val: 0 }
     ];
+  } else {
+    return null;
   }
 
-  // Dữ liệu đường kích thước ngang (Bên dưới) - Dùng chung cho cả 2 loại hộp
   const hPoints = [
     { x: minX, val: taiDan },
     { x: 0, val: X },
@@ -2807,6 +2783,37 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
     { x: 2*X + Y, val: Y },
     { x: maxX, val: 0 }
   ];
+
+  return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY };
+}
+
+// ==========================================
+// COMPONENT VẼ TRẢI PHẲNG (FLAT LAYOUT SVG)
+// ==========================================
+function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
+  const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
+  const X = safeParse(width);
+  const Y = safeParse(depth);
+  const Z = safeParse(height);
+
+  if (X <= 0 || Y <= 0 || Z <= 0) {
+    return null; // Không vẽ nếu chưa nhập đủ kích thước
+  }
+
+  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+
+  if (!geom) {
+    return (
+      <div className="w-full h-auto p-10 bg-orange-50 border border-orange-200 border-dashed rounded-xl flex flex-col items-center justify-center text-orange-600 mt-2 text-center min-h-[300px]">
+        <Box size={40} className="mb-3 opacity-50 text-orange-400" />
+        <span className="text-lg font-semibold mb-1">Chưa có dữ liệu vẽ trải phẳng</span>
+        <span className="text-sm">Vui lòng chọn <strong>"Hộp cài 2 đầu"</strong>, <strong>"Hộp dán 2 đầu"</strong>, <strong>"Hộp nắp cài đáy khoá"</strong> hoặc <strong>"Hộp nắp cài đáy móc"</strong> để xem cấu trúc</span>
+      </div>
+    );
+  }
+
+  const { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY } = geom;
+  const fmt = (num) => Number(Math.abs(num).toFixed(2));
 
   const pad = Math.max(X, Y, Z) * 0.15; 
   const dimOffset = pad * 1.5; 
@@ -2835,7 +2842,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   const hTotalY = hBaseY + dimOffset;
 
   return (
-    <div className="w-full bg-[#f8f9fa] border border-dashed border-[#cbd5e1] rounded-xl overflow-hidden relative shadow-inner p-4 flex justify-center items-center">
+    <div className="w-full bg-[#f8f9fa] border border-dashed border-[#cbd5e1] rounded-xl overflow-hidden relative shadow-inner p-4 flex justify-center items-center mt-2">
       <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[600px] drop-shadow-sm">
         
         {/* VẼ ĐƯỜNG GIÓNG VÀ KÍCH THƯỚC DỌC (TRÁI) */}
@@ -2922,6 +2929,93 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
   );
 }
 
+// ==========================================
+// COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
+// ==========================================
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase }) {
+  const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
+  const X = safeParse(width);
+  const Y = safeParse(depth);
+  const Z = safeParse(height);
+  const cCols = parseInt(cols) || 1;
+  const cRows = parseInt(rows) || 1;
+
+  if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return null;
+
+  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+  if (!geom) return null;
+
+  const { outlinePath, creaseLines, minX, maxX, minY, maxY } = geom;
+  
+  const singleW = maxX - minX;
+  const singleH = maxY - minY;
+  const gap = 0.5; // Khoảng cách khe hở giữa các hộp (cm)
+
+  const totalW = cCols * singleW + (cCols - 1) * gap;
+  const totalH = cRows * singleH + (cRows - 1) * gap;
+
+  const pad = Math.max(totalW, totalH) * 0.1;
+  const vbX = -pad;
+  const vbY = -pad;
+  const vbW = totalW + pad * 2;
+  const vbH = totalH + pad * 2;
+
+  const strokeW = vbW * 0.0015;
+  const theme = {
+    stroke: "#333333",
+    fill: "#f8fafc",
+    crease: "#94a3b8",
+    dimText: "#475569",
+    dimLine: "#64748b"
+  };
+
+  const fmt = (num) => Number(Math.abs(num).toFixed(2));
+
+  return (
+    <div className="w-full bg-[#f8f9fa] border border-dashed border-[#cbd5e1] rounded-xl overflow-hidden relative shadow-inner p-4 flex flex-col justify-center items-center mt-2">
+      <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[600px] drop-shadow-sm">
+        {/* Vẽ Kích thước tổng */}
+        <path d={`M 0 -${pad*0.3} L ${totalW} -${pad*0.3}`} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <line x1={0} y1={-pad*0.4} x2={0} y2={-pad*0.2} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <line x1={totalW} y1={-pad*0.4} x2={totalW} y2={-pad*0.2} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <text x={totalW/2} y={-(pad*0.45)} fill={theme.dimText} fontSize={Math.max(vbW * 0.015, 0.5)} textAnchor="middle">Ngang cụm khuôn: {fmt(totalW)} cm</text>
+
+        <path d={`M -${pad*0.3} 0 L -${pad*0.3} ${totalH}`} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <line x1={-pad*0.4} y1={0} x2={-pad*0.2} y2={0} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <line x1={-pad*0.4} y1={totalH} x2={-pad*0.2} y2={totalH} stroke={theme.dimLine} strokeWidth={strokeW} />
+        <text x={-(pad*0.45)} y={totalH/2} fill={theme.dimText} fontSize={Math.max(vbW * 0.015, 0.5)} textAnchor="middle" transform={`rotate(-90, -${pad*0.45}, ${totalH/2})`}>Cao cụm khuôn: {fmt(totalH)} cm</text>
+
+        {/* Lặp Lưới Vẽ Các Bát */}
+        {Array.from({length: cRows}).map((_, r) => (
+          Array.from({length: cCols}).map((_, col) => {
+            const tx = col * (singleW + gap) - minX;
+            const ty = r * (singleH + gap) - minY;
+            const batId = r * cCols + col + 1;
+            return (
+              <g transform={`translate(${tx}, ${ty})`} key={`box-${r}-${col}`}>
+                <path d={outlinePath} fill={theme.fill} stroke="none" />
+                {creaseLines.map((line, i) => (
+                  <line 
+                    key={`crease-${i}`} 
+                    x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} 
+                    stroke={theme.crease} 
+                    strokeWidth={strokeW * 0.8} 
+                    strokeDasharray={`${strokeW * 3},${strokeW * 3}`} 
+                  />
+                ))}
+                <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
+                <text x={(minX+maxX)/2} y={(minY+maxY)/2} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                  {batId}
+                </text>
+              </g>
+            )
+          })
+        ))}
+      </svg>
+    </div>
+  );
+}
+
 function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, hopMemDatabase, isLoadingPrices, fetchPaperPrices }) {
   // --- STATES THÔNG TIN CHUNG ---
   const [productName, setProductName] = useState('Hộp mỹ phẩm');
@@ -2935,8 +3029,8 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [paperType, setPaperType] = useState('Ivory');
   const [paperGsm, setPaperGsm] = useState('');
   const [parentSizeIdx, setParentSizeIdx] = useState('');
-  const [cols, setCols] = useState(''); // Số bát ngang
-  const [rows, setRows] = useState(''); // Số bát dọc
+  const [cols, setCols] = useState(1); // Số bát ngang
+  const [rows, setRows] = useState(1); // Số bát dọc
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
   const [allowMixed, setAllowMixed] = useState(false);
@@ -3042,6 +3136,17 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
           
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
+              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
+              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
               <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); }}>
                 {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
@@ -3062,17 +3167,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
               {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
             </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-1">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
-              <input type="number" className="w-full p-2 border border-slate-300 rounded outline-none text-sm" placeholder="Nhập số bát..." value={cols} onChange={(e) => setCols(e.target.value)}/>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
-              <input type="number" className="w-full p-2 border border-slate-300 rounded outline-none text-sm" placeholder="Nhập số bát..." value={rows} onChange={(e) => setRows(e.target.value)}/>
-            </div>
           </div>
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
@@ -3201,11 +3295,15 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
         ) : (
           <>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
-              <h2 className="text-lg font-semibold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
+              <h2 className="text-lg font-semibold mb-2 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Bản vẽ kỹ thuật (Flat Layout)</span>
               </h2>
-              
               <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
+              
+              <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
+                <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
+              </h2>
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
