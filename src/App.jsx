@@ -2962,12 +2962,35 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   const stepH = singleH - overlapY + gap;
 
   let extraW = 0;
-  if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1) {
+  // CẬP NHẬT 1: Thay đổi điều kiện từ cRows === 2 thành cRows >= 2
+  if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && cCols === 1) {
     extraW = Math.max(0, Y - taiDan);
   }
 
   const totalW = singleW + (cCols - 1) * stepW + extraW;
-  const totalH = singleH + (cRows - 1) * stepH;
+  
+  // Xử lý tính toán toạ độ Y động cho từng dòng
+  const rowYPositions = [];
+  let currentY = 0;
+  for (let r = 0; r < cRows; r++) {
+    if (r === 0) {
+      rowYPositions.push(currentY);
+    } else {
+      if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cCols === 1) {
+        if (r % 2 === 1) {
+          // Bát lẻ (vd r=1): Giao diện Nắp gặp Nắp -> lồng ghép sâu được
+          currentY += singleH - overlapY + gap;
+        } else {
+          // Bát chẵn (vd r=2): Giao diện Đáy gặp Đáy -> đối đầu nhau (chạm mũi), không lồng ghép
+          currentY += singleH + gap;
+        }
+      } else {
+        currentY += stepH;
+      }
+      rowYPositions.push(currentY);
+    }
+  }
+  const totalH = cRows > 0 ? rowYPositions[cRows - 1] + singleH : singleH;
 
   const pad = Math.max(totalW, totalH) * 0.1;
   const vbX = -pad;
@@ -3004,17 +3027,18 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
         {Array.from({length: cRows}).map((_, r) => (
           Array.from({length: cCols}).map((_, col) => {
             let tx = col * stepW - minX;
-            const ty = r * stepH - minY;
+            const ty = rowYPositions[r] - minY;
             const batId = r * cCols + col + 1;
             
-            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1 && r === 1) {
+            // CẬP NHẬT 2: Áp dụng dịch chuyển X cho các dòng lẻ (index 1, 3, 5...) bằng phép chia lấy dư r % 2 === 1
+            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && cCols === 1 && r % 2 === 1) {
               tx += (Y - taiDan);
             }
 
             let transformStr = `translate(${tx}, ${ty})`;
             
-            // Xử lý Mirror (flip ngang + flip dọc) cho bát số 1 (r === 0) của cả Nắp cài đáy khóa và Nắp cài đáy móc
-            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1 && r === 0) {
+            // CẬP NHẬT 3: Cập nhật điều kiện Mirror (flip ngang + flip dọc) cho các bát ở dòng chẵn (index 0, 2, 4...)
+            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && cCols === 1 && r % 2 === 0) {
               const cx = (minX + maxX) / 2;
               const cy = (minY + maxY) / 2;
               transformStr += ` translate(${cx}, ${cy}) scale(-1, -1) translate(${-cx}, ${-cy})`;
