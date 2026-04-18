@@ -2793,6 +2793,94 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY, overlapX, overlapY, taiDan };
 }
 
+function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
+  const getBoxConfig = (w, db) => {
+    const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
+    if (!db || !Array.isArray(db) || db.length === 0) return fallback;
+    for (let i = 0; i < db.length; i++) {
+      const row = db[i];
+      const fromX = parseFloat(row.fromX) || 0;
+      const toX = parseFloat(row.toX) || 999999;
+      if (w >= fromX && w <= toX) {
+        return {
+          taiDan: parseFloat(row.taiDan) || fallback.taiDan,
+          taiGai: parseFloat(row.napHop) || fallback.taiGai,
+          khoaDayGai: parseFloat(row.khoaDayGai) || fallback.khoaDayGai,
+          khoaDayCheo: parseFloat(row.khoaDayCheo) || fallback.khoaDayCheo
+        };
+      }
+    }
+    return fallback;
+  };
+
+  const boxConfig = getBoxConfig(X, hopMemDatabase);
+  const taiGai = boxConfig.taiGai;
+  const taiDan = boxConfig.taiDan;
+  const thuGoc = 0.2;
+  const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
+  const c = thuGoc;
+
+  if (boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') {
+    const dayKhoaH = Y / 2 + taiGai;
+    const taiDayH = boxType === 'nap_cai_day_moc' ? dayKhoaH * 0.75 : dayKhoaH;
+    
+    const outlinePath = `
+      M 0 0
+      L ${c} ${-taiPhuH}
+      L ${Y - c} ${-taiPhuH}
+      L ${Y} 0
+      L ${Y} ${-Y}
+      L ${Y + c} ${-Y - taiGai}
+      L ${Y + X - c} ${-Y - taiGai}
+      L ${Y + X} ${-Y}
+      L ${Y + X} 0
+      L ${Y + X + c} ${-taiPhuH}
+      L ${2*Y + X - c} ${-taiPhuH}
+      L ${2*Y + X} 0
+      L ${2*Y + 2*X} 0
+      L ${2*Y + 2*X + taiDan} ${c}
+      L ${2*Y + 2*X + taiDan} ${Z - c}
+      L ${2*Y + 2*X} ${Z}
+      L ${2*Y + 2*X} ${Z + dayKhoaH}
+      L ${2*Y + X} ${Z + dayKhoaH}
+      L ${2*Y + X} ${Z}
+      L ${2*Y + X - c} ${Z + taiDayH}
+      L ${Y + X + c} ${Z + taiDayH}
+      L ${Y + X} ${Z}
+      L ${Y} ${Z}
+      L ${Y - c} ${Z + taiDayH}
+      L ${c} ${Z + taiDayH}
+      L 0 ${Z}
+      Z
+    `;
+
+    const creaseLines = [
+      { x1: Y, y1: 0, x2: Y, y2: Z },
+      { x1: Y + X, y1: 0, x2: Y + X, y2: Z },
+      { x1: 2*Y + X, y1: 0, x2: 2*Y + X, y2: Z },
+      { x1: 2*Y + 2*X, y1: 0, x2: 2*Y + 2*X, y2: Z },
+      { x1: 0, y1: 0, x2: Y, y2: 0 },
+      { x1: Y, y1: 0, x2: Y + X, y2: 0 },
+      { x1: Y + X, y1: 0, x2: 2*Y + X, y2: 0 },
+      { x1: Y, y1: -Y, x2: Y + X, y2: -Y },
+      { x1: 0, y1: Z, x2: Y, y2: Z },
+      { x1: Y + X, y1: Z, x2: 2*Y + X, y2: Z },
+      { x1: 2*Y + X, y1: Z, x2: 2*Y + 2*X, y2: Z }
+    ];
+
+    return { 
+      outlinePath, 
+      creaseLines, 
+      minX: 0, 
+      maxX: 2*X + 2*Y + taiDan, 
+      minY: -Y - taiGai, 
+      maxY: Z + dayKhoaH, 
+      taiDan 
+    };
+  }
+  return null;
+}
+
 // ==========================================
 // COMPONENT VẼ TRẢI PHẲNG (FLAT LAYOUT SVG)
 // ==========================================
@@ -2938,7 +3026,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, daoTaiDan }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -2950,6 +3038,8 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
   const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
   if (!geom) return null;
+
+  const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
 
   const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
   
@@ -2964,7 +3054,11 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   let extraW = 0;
   // CẬP NHẬT 1: Thay đổi điều kiện từ cRows === 2 thành cRows >= 2 và loại bỏ cCols === 1 để áp dụng cho nhiều cột
   if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2) {
-    extraW = Math.max(0, Y - taiDan);
+    if (daoTaiDan && geomDao) {
+      extraW = 0;
+    } else {
+      extraW = Math.max(0, Y - taiDan);
+    }
   }
 
   const totalW = singleW + (cCols - 1) * stepW + extraW;
@@ -3027,28 +3121,46 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
         {/* Lặp Lưới Vẽ Các Bát */}
         {Array.from({length: cRows}).map((_, r) => (
           Array.from({length: cCols}).map((_, col) => {
-            let tx = col * stepW - minX;
-            const ty = rowYPositions[r] - minY;
+            
+            const isRotatedRow = (boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && r % 2 === 0;
+            const useDao = daoTaiDan && isRotatedRow && geomDao;
+            
+            const currentGeom = useDao ? geomDao : geom;
+            const cMinX = currentGeom.minX;
+            const cMaxX = currentGeom.maxX;
+            const cMinY = currentGeom.minY;
+            const cMaxY = currentGeom.maxY;
+
+            let tx = col * stepW - cMinX;
+            const ty = rowYPositions[r] - cMinY;
             const batId = r * cCols + col + 1;
             
-            // CẬP NHẬT 2: Áp dụng dịch chuyển X cho các dòng lẻ (index 1, 3, 5...) bằng phép chia lấy dư r % 2 === 1. Loại bỏ cCols === 1.
-            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && r % 2 === 1) {
-              tx += (Y - taiDan);
+            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2) {
+              if (daoTaiDan && geomDao) {
+                 if (r % 2 === 1) {
+                    tx = col * stepW + taiDan;
+                 } else {
+                    tx = col * stepW;
+                 }
+              } else {
+                 if (r % 2 === 1) {
+                    tx += (Y - taiDan);
+                 }
+              }
             }
 
             let transformStr = `translate(${tx}, ${ty})`;
             
-            // CẬP NHẬT 3: Cập nhật điều kiện Mirror (flip ngang + flip dọc) cho các bát ở dòng chẵn (index 0, 2, 4...). Loại bỏ cCols === 1.
-            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2 && r % 2 === 0) {
-              const cx = (minX + maxX) / 2;
-              const cy = (minY + maxY) / 2;
+            if (isRotatedRow) {
+              const cx = (cMinX + cMaxX) / 2;
+              const cy = (cMinY + cMaxY) / 2;
               transformStr += ` translate(${cx}, ${cy}) scale(-1, -1) translate(${-cx}, ${-cy})`;
             }
 
             return (
               <g transform={transformStr} key={`box-${r}-${col}`}>
-                <path d={outlinePath} fill={theme.fill} stroke="none" />
-                {creaseLines.map((line, i) => (
+                <path d={currentGeom.outlinePath} fill={theme.fill} stroke="none" />
+                {currentGeom.creaseLines.map((line, i) => (
                   <line 
                     key={`crease-${i}`} 
                     x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} 
@@ -3057,8 +3169,8 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
                     strokeDasharray={`${strokeW * 3},${strokeW * 3}`} 
                   />
                 ))}
-                <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
-                <text x={(minX+maxX)/2} y={(minY+maxY)/2} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                <path d={currentGeom.outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
+                <text x={(cMinX+cMaxX)/2} y={(cMinY+cMaxY)/2} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
                   {batId}
                 </text>
               </g>
@@ -3085,6 +3197,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [parentSizeIdx, setParentSizeIdx] = useState('');
   const [cols, setCols] = useState(1); // Số bát ngang
   const [rows, setRows] = useState(1); // Số bát dọc
+  const [daoTaiDan, setDaoTaiDan] = useState(false);
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
   const [allowMixed, setAllowMixed] = useState(false);
@@ -3198,6 +3311,15 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
             </div>
           </div>
+
+          {(boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && (
+            <div className="pt-1">
+              <label className="flex items-center space-x-1.5 cursor-pointer group w-fit">
+                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={daoTaiDan} onChange={(e) => setDaoTaiDan(e.target.checked)} />
+                <span className="text-sm font-medium text-slate-700">Đảo tai dán</span>
+              </label>
+            </div>
+          )}
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
             <div className="space-y-1">
@@ -3357,7 +3479,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} />
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
