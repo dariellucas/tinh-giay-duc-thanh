@@ -1,79 +1,163 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { Settings, RefreshCw, AlertCircle, Maximize, Layout, FileText, Printer, BookOpen, Layers, Book, Box, ShoppingBag, Mail, StickyNote, Sparkles } from 'lucide-react';
+import { 
+  Settings, Maximize, Printer, Layout, AlertCircle, 
+  FileText, X, Copy, Check, RefreshCw, BookOpen, Book, 
+  Box, ShoppingBag, Mail, StickyNote, Sparkles, Layers,
+  ChevronDown, ChevronRight
+} from 'lucide-react';
 
-const GOOGLE_SHEETS_API_URL = '';
-const PRODUCT_SIZES = [
-  { label: 'A4 (21x29.7)', w: 21, h: 29.7 },
-  { label: 'A5 (14.8x21)', w: 14.8, h: 21 },
-  { label: 'Tùy chỉnh...', w: 0, h: 0 }
+// ==========================================
+// CONSTANTS & DỮ LIỆU CƠ BẢN
+// ==========================================
+const GOOGLE_SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxG6_SjHC3__zrbNV2s5wTr2ngrj_4Az1xcxhpe9xR-KSowPMnwcKF_ro5s3Le-J0/exec'; 
+
+const DEFAULT_PAPER_DATA = [
+  { paperType: "Couche", gsm: 80, price: 22.4, rolls: "62; 65; 72; 79; 86; 109" }, 
+  { paperType: "Couche", gsm: 100, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
+  { paperType: "Couche", gsm: 120, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
+  { paperType: "Couche", gsm: 150, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
+  { paperType: "Couche", gsm: 180, price: 20.8, rolls: "62; 86" }, 
+  { paperType: "Couche", gsm: 200, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
+  { paperType: "Couche", gsm: 230, price: 20.8, rolls: "79; 109" }, 
+  { paperType: "Couche", gsm: 250, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
+  { paperType: "Couche", gsm: 300, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" }, 
+  { paperType: "Couche Matt", gsm: 100, price: 20.8 },
+  { paperType: "Couche Matt", gsm: 120, price: 20.8 },
+  { paperType: "Off", gsm: 200, price: 26.0 }, { paperType: "Off", gsm: 250, price: 26.0 },
+  { paperType: "Ivory", gsm: 210, price: 18.7 }, { paperType: "Ivory", gsm: 230, price: 17.7 },
+  { paperType: "Ivory", gsm: 250, price: 17.7 }, { paperType: "Ivory", gsm: 300, price: 17.7 },
+  { paperType: "Ivory", gsm: 350, price: 17.7 }, { paperType: "Ivory", gsm: 400, price: 17.7 },
+  { paperType: "Duplex", gsm: 250, price: 17.0 }, { paperType: "Duplex", gsm: 270, price: 17.0 },
+  { paperType: "Duplex", gsm: 300, price: 15.8 }, { paperType: "Duplex", gsm: 310, price: 15.8 },
+  { paperType: "Duplex", gsm: 350, price: 15.3 }, { paperType: "Duplex", gsm: 400, price: 15.3 },
+  { paperType: "Duplex", gsm: 450, price: 15.3 }, { paperType: "Kraft trắng", gsm: 100, price: 30.7 },
+  { paperType: "Kraft trắng", gsm: 120, price: 30.7 }, { paperType: "Kraft nâu", gsm: 170, price: 13.6 },
+  { paperType: "Kraft nâu", gsm: 250, price: 17.0 }, { paperType: "Kraft nâu", gsm: 280, price: 17.0 },
+  { paperType: "Kraft nâu", gsm: 300, price: 17.0 }, { paperType: "Kraft nâu", gsm: 350, price: 17.0 },
+  { paperType: "Bãi Bằng", gsm: 60, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 70, price: 25.5 },
+  { paperType: "Bãi Bằng", gsm: 80, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 100, price: 25.5 }
 ];
-const KHO_THIEU_SIZES = [
-  { label: 'A4 thiếu (20x29)', w: 20, h: 29 },
-  { label: 'A5 thiếu (14.5x20)', w: 14.5, h: 20 },
-  null
+
+const DEFAULT_PRINTER_DATA = [
+  { id: 'fallback_1', name: '65x86', platePrice: 100000, runPrice: 500000 },
+  { id: 'fallback_2', name: '52x72', platePrice: 80000, runPrice: 400000 },
+  { id: 'fallback_3', name: '72x102', platePrice: 150000, runPrice: 800000 }
 ];
+
+const DEFAULT_FINISHING_DATA = [
+  { item: 'Xả lô', price: 0, unit: 'VNĐ / 1 bài', minPrice: 150000 },
+  { item: 'Cán mờ', price: 0.25, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
+  { item: 'Cán bóng', price: 0.23, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
+  { item: 'Gấp vạch', price: 15, unit: 'VNĐ / 1 vạch / 1 tờ', minPrice: 200000 },
+  { item: 'Xén', price: 30000, unit: 'VNĐ / 1 ream', minPrice: 80000 },
+  { item: 'Ghim gáy', price: 15, unit: 'VNĐ / 1 trang', minPrice: 600000 },
+  { item: 'Keo gáy', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1000000 },
+  { item: 'Khâu keo', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1500000 },
+  { item: 'Gáy lò xo A4', price: 4500, unit: 'VNĐ / 1 quyển', minPrice: 300000 },
+  { item: 'Gáy lò xo A5', price: 3500, unit: 'VNĐ / 1 quyển', minPrice: 300000 }
+];
+
+const DEFAULT_DINHMUC_DATA = [
+  { category: 'In', fromQty: 1, toQty: 5000, name: 'Ít', spoilage: 100, unit: 'Tờ in' },
+  { category: 'In', fromQty: 5001, toQty: 7000, name: 'Trung bình', spoilage: 150, unit: 'Tờ in' },
+  { category: 'In', fromQty: 7001, toQty: 10000, name: 'Nhiều', spoilage: 200, unit: 'Tờ in' },
+  { category: 'In', fromQty: 10001, toQty: 9999999999, name: 'Rất nhiều', spoilage: 300, unit: 'Tờ in' }
+];
+
 const PARENT_PAPER_SIZES = [
-  { label: '65 x 86 cm', w: 65, h: 86 },
-  { label: '60 x 84 cm', w: 60, h: 84 },
-  { label: '79 x 109 cm', w: 79, h: 109 }
+  "27 x 52", "36.3 x 39.5", "36 x 52", "32.5 x 43", 
+  "39.5 x 54.5", "43 x 62", "43 x 65", "52 x 72", 
+  "54.5 x 79", "62 x 86", "65 x 86", "72 x 102", "79 x 109"
+].map(size => {
+  const [a, b] = size.split('x').map(s => parseFloat(s.trim()));
+  return { label: size, w: Math.max(a, b), h: Math.min(a, b) };
+});
+
+const PRODUCT_SIZES = [
+  { label: 'A3 (42 x 29.7)', w: 42, h: 29.7 },
+  { label: 'A4 (29.7 x 21)', w: 29.7, h: 21 },
+  { label: 'A5 (21 x 14.8)', w: 21, h: 14.8 },
+  { label: 'Kích thước khác', w: 0, h: 0 }
 ];
+
+const KHO_THIEU_SIZES = {
+  0: { w: 41.8, h: 29.7, label: 'A3 thiếu (41.8 x 29.7)' },
+  1: { w: 29.7, h: 20.7, label: 'A4 thiếu (29.7 x 20.7)' },
+  2: { w: 20.7, h: 14.8, label: 'A5 thiếu (20.7 x 14.8)' },
+};
+
 const LAMINATION_TYPES = [
   { id: 'none', label: 'Không cán' },
   { id: 'matte', label: 'Cán mờ' },
-  { id: 'gloss', label: 'Cán bóng' }
+  { id: 'glossy', label: 'Cán bóng' }
 ];
-const MARKUP_RATES = [1.0, 1.1, 1.15, 1.2, 1.25, 1.3, 1.4, 1.5];
+
+const MARKUP_RATES = [
+  1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8
+];
+
 const BINDING_TYPES = [
   { id: 'ghim', label: 'Ghim gáy' },
   { id: 'keo', label: 'Keo gáy' },
   { id: 'khau', label: 'Khâu keo' },
   { id: 'loxo', label: 'Gáy lò xo' }
 ];
-const DEFAULT_PAPER_DATA = {};
-const DEFAULT_PRINTER_DATA = [];
-const DEFAULT_FINISHING_DATA = [];
-const DEFAULT_DINHMUC_DATA = [];
+
 
 // ==========================================
-// COMPONENT VẼ BẢN IN (CANVAS TỜ RỜI)
+// THÀNH PHẦN CANVAS BẢN VẼ (Cho Tờ Rơi)
 // ==========================================
 function ImpositionCanvas({ result }) {
   if (!result) return null;
-  const { parentW, parentH, blocks, gripper, topMargin } = result;
-  const MARGIN = 0.2;
+  const { parentW, parentH, blocks, gap, gripper, impositionStyle, printSides, topMargin } = result;
+  const MARGIN = 0.2; const GAP = gap; const GRIPPER = gripper;
   const padding = Math.max(parentW, parentH) * 0.05;
-  const strokeW = Math.max(parentW, parentH) * 0.002;
-  const fontSize = Math.max(parentW, parentH) * 0.025;
-  const hasTopGripper = gripper > 0;
+  const viewBox = `-${padding} -${padding} ${parentW + padding*2} ${parentH + padding*2}`;
+
   const items = [];
-  
-  blocks.forEach(block => {
-    for (let c = 0; c < block.cols; c++) {
-      for (let r = 0; r < block.rows; r++) {
-         items.push({
-           id: `${block.x}-${block.y}-${c}-${r}`,
-           x: block.x + c * (block.w + result.gap) + MARGIN,
-           y: block.y + r * (block.h + result.gap) + topMargin,
-           w: block.w,
-           h: block.h,
-           sideLabel: 'Mặt In',
-           isFirstInBlock: c === 0 && r === 0
-         });
+  blocks.forEach((block, bIdx) => {
+    for (let r = 0; r < block.rows; r++) {
+      for (let c = 0; c < block.cols; c++) {
+        let sideLabel = 'A';
+        if (printSides === 2) {
+          if (impositionStyle === 'Trở nó') {
+            sideLabel = c < block.cols / 2 ? 'A' : 'B';
+          } else if (impositionStyle === 'Trở lật') {
+            sideLabel = r < block.rows / 2 ? 'A' : 'B';
+          }
+        }
+        
+        items.push({
+          x: MARGIN + block.x + c * (block.w + GAP), 
+          y: topMargin + block.y + r * (block.h + GAP), 
+          w: block.w, h: block.h,
+          id: `item-${bIdx}-${r}-${c}`, 
+          isFirstInBlock: r === 0 && c === 0,
+          sideLabel: sideLabel
+        });
       }
     }
   });
 
+  const fontSize = Math.max(parentW, parentH) * 0.025;
+  const strokeW = Math.max(parentW, parentH) * 0.002;
+  const hasTopGripper = printSides === 2 && impositionStyle === 'Trở lật' && GRIPPER > 0;
+
   return (
-    <svg viewBox={`-${padding} -${padding} ${parentW + padding*2} ${parentH + padding*2}`} className="w-full h-auto drop-shadow-md bg-white">
+    <svg className="w-full h-full max-h-[600px] drop-shadow-md" viewBox={viewBox} preserveAspectRatio="xMidYMid meet">
       <rect x={0} y={0} width={parentW} height={parentH} fill="#ffffff" stroke="#94a3b8" strokeWidth={strokeW * 2} />
-      {hasTopGripper && (
-        <g>
-          <rect x={0} y={0} width={parentW} height={gripper} fill="#1e293b" opacity="0.8"/>
-          <text x={parentW / 2} y={gripper/2} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle" transform={`rotate(180, ${parentW/2}, ${gripper/2})`}>NHÍP ({gripper * 10}mm)</text>
-        </g>
+      
+      {GRIPPER > 0 && (
+        <><rect x={0} y={parentH - GRIPPER} width={parentW} height={GRIPPER} fill="#1e293b" opacity="0.8"/>
+          <text x={parentW / 2} y={parentH - (GRIPPER/2)} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle">NHÍP ({GRIPPER * 10}mm)</text></>
       )}
 
-      <rect x={MARGIN} y={topMargin} width={parentW - (MARGIN*2)} height={parentH - topMargin - (gripper > 0 ? gripper : MARGIN)} fill="none" stroke="#fca5a5" strokeWidth={strokeW} strokeDasharray={`${strokeW*4},${strokeW*4}`} />
+      {hasTopGripper && (
+        <><rect x={0} y={0} width={parentW} height={GRIPPER} fill="#1e293b" opacity="0.8"/>
+          <text x={parentW / 2} y={GRIPPER/2} fill="white" fontSize={fontSize * 0.8} textAnchor="middle" dominantBaseline="middle" transform={`rotate(180, ${parentW/2}, ${GRIPPER/2})`}>NHÍP ({GRIPPER * 10}mm)</text></>
+      )}
+
+      <rect x={MARGIN} y={topMargin} width={parentW - (MARGIN*2)} height={parentH - topMargin - (GRIPPER > 0 ? GRIPPER : MARGIN)} fill="none" stroke="#fca5a5" strokeWidth={strokeW} strokeDasharray={`${strokeW*4},${strokeW*4}`} />
       
       {items.map(item => (
         <g key={item.id}>
@@ -1253,7 +1337,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
 
   const handleCalculate = () => {
     if (!productTypeIdx || !quantity || !totalPages || !isPagesValid) {
-      setError('Vui lòng điền đầy đủ và chính xác thông vị chung (Số trang phải chia hết cho 4).');
+      setError('Vui lòng điền đầy đủ và chính xác thông tin chung (Số trang phải chia hết cho 4).');
       setResult(null);
       return;
     }
@@ -2347,7 +2431,7 @@ function Box3DViewer({ width, depth, height }) {
 // ==========================================
 // TÍNH TOÁN HÌNH HỌC HỘP MỀM
 // ==========================================
-function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false) {
+function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   const getBoxConfig = (w, db) => {
     const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
     if (!db || !Array.isArray(db) || db.length === 0) return fallback;
@@ -2381,11 +2465,12 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false
   let creaseLines = [];
   let panels = [];
   let vPoints = [];
-  let minX = -taiDan;
-  let maxX = 2*X + 2*Y;
   let minY = 0, maxY = 0;
   let overlapX = 0; // Thêm biến lưu khoảng cách lồng ghép ngang
   let overlapY = 0; // Thêm biến lưu khoảng cách lồng ghép dọc
+
+  const minX = -taiDan;
+  const maxX = 2*X + 2*Y;
 
   // LỰA CHỌN CẤU TRÚC HỘP
   if (boxType === 'cai_2_dau') {
@@ -2468,8 +2553,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false
   } else if (boxType === 'dan_2_dau') {
     minY = -Y;
     maxY = Z + Y;
-    overlapY = 0; // Hộp dán 2 đầu xếp mép chạm mép theo chiều dọc
-    overlapX = 0; 
+    overlapY = 0; // Khôi phục khoảng cách lồng ghép theo trục Y về 0 theo yêu cầu
 
     outlinePath = `
       M 0 0
@@ -2544,146 +2628,84 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false
     const dayKhoaH = Y / 2 + taiGai;
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
-    overlapY = 0; // Đáy khóa chiếm toàn bộ biên dưới, xếp mép chạm mép tương tự hộp dán 2 đầu
-    overlapX = 0;
+    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
 
-    if (isDaoTaiDan) {
-      // BẢN VẼ BIẾN THỂ: ĐẢO TAI DÁN & DỊCH CHUYỂN HÔNG
-      // Trật tự mới: [Hông 2] - [Mặt Trước] - [Hông 1] - [Mặt Sau] - [Tai Dán]
-      minX = 0;
-      maxX = 2*X + 2*Y + taiDan;
-      
-      outlinePath = `
-        M 0 0
-        L ${c} ${-taiPhuH}
-        L ${Y - c} ${-taiPhuH}
-        L ${Y} 0
-        L ${Y} ${-Y}
-        L ${Y + c} ${-Y - taiGai}
-        L ${Y + X - c} ${-Y - taiGai}
-        L ${Y + X} ${-Y}
-        L ${Y + X} 0
-        L ${Y + X + c} ${-taiPhuH}
-        L ${2*Y + X - c} ${-taiPhuH}
-        L ${2*Y + X} 0
-        L ${2*Y + 2*X} 0
-        L ${2*Y + 2*X + taiDan} ${c}
-        L ${2*Y + 2*X + taiDan} ${Z - c}
-        L ${2*Y + 2*X} ${Z}
-        L ${2*Y + 2*X} ${Z + dayKhoaH}
-        L ${2*Y + X} ${Z + dayKhoaH}
-        L ${2*Y + X} ${Z}
-        L ${2*Y + X - c} ${Z + dayKhoaH}
-        L ${Y + X + c} ${Z + dayKhoaH}
-        L ${Y + X} ${Z}
-        L ${Y + X} ${Z + dayKhoaH}
-        L ${Y} ${Z + dayKhoaH}
-        L ${Y} ${Z}
-        L ${Y - c} ${Z + dayKhoaH}
-        L ${c} ${Z + dayKhoaH}
-        L 0 ${Z}
-        Z
-      `;
+    outlinePath = `
+      M 0 0
+      L 0 ${-Y}
+      L ${c} ${-Y - taiGai}
+      L ${X - c} ${-Y - taiGai}
+      L ${X} ${-Y}
+      L ${X} 0
+      L ${X + c} ${-taiPhuH}
+      L ${X + Y - c} ${-taiPhuH}
+      L ${X + Y} 0
+      L ${2*X + Y} 0
+      L ${2*X + Y + c} ${-taiPhuH}
+      L ${2*X + 2*Y - c} ${-taiPhuH}
+      L ${2*X + 2*Y} 0
+      L ${2*X + 2*Y} ${Z}
+      L ${2*X + 2*Y - c} ${Z + dayKhoaH}
+      L ${2*X + Y + c} ${Z + dayKhoaH}
+      L ${2*X + Y} ${Z}
+      L ${2*X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z + dayKhoaH}
+      L ${X + Y} ${Z}
+      L ${X + Y - c} ${Z + dayKhoaH}
+      L ${X + c} ${Z + dayKhoaH}
+      L ${X} ${Z}
+      L ${X} ${Z + dayKhoaH}
+      L 0 ${Z + dayKhoaH}
+      L 0 ${Z}
+      L ${-taiDan} ${Z - c}
+      L ${-taiDan} ${c}
+      Z
+    `;
 
-      creaseLines = [
-        { x1: Y, y1: 0, x2: Y, y2: Z }, 
-        { x1: Y + X, y1: 0, x2: Y + X, y2: Z }, 
-        { x1: 2*Y + X, y1: 0, x2: 2*Y + X, y2: Z }, 
-        { x1: 2*Y + 2*X, y1: 0, x2: 2*Y + 2*X, y2: Z }, 
-        { x1: 0, y1: 0, x2: Y, y2: 0 }, 
-        { x1: Y, y1: 0, x2: Y + X, y2: 0 }, 
-        { x1: Y + X, y1: 0, x2: 2*Y + X, y2: 0 }, 
-        { x1: 2*Y + X, y1: 0, x2: 2*Y + 2*X, y2: 0 }, 
-        { x1: Y, y1: -Y, x2: Y + X, y2: -Y }, 
-        { x1: 0, y1: Z, x2: Y, y2: Z }, 
-        { x1: Y, y1: Z, x2: Y + X, y2: Z }, 
-        { x1: Y + X, y1: Z, x2: 2*Y + X, y2: Z }, 
-        { x1: 2*Y + X, y1: Z, x2: 2*Y + 2*X, y2: Z }  
-      ];
-      
-      panels = [];
-      vPoints = [];
+    creaseLines = [
+      { x1: 0, y1: 0, x2: 0, y2: Z }, 
+      { x1: X, y1: 0, x2: X, y2: Z }, 
+      { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
+      { x1: 0, y1: 0, x2: X, y2: 0 }, 
+      { x1: 0, y1: -Y, x2: X, y2: -Y }, 
+      { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
+      { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
+      { x1: 0, y1: Z, x2: X, y2: Z }, 
+      { x1: X, y1: Z, x2: X + Y, y2: Z }, 
+      { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
+      { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
+    ];
 
-    } else {
-      // BẢN VẼ TIÊU CHUẨN
-      outlinePath = `
-        M 0 0
-        L 0 ${-Y}
-        L ${c} ${-Y - taiGai}
-        L ${X - c} ${-Y - taiGai}
-        L ${X} ${-Y}
-        L ${X} 0
-        L ${X + c} ${-taiPhuH}
-        L ${X + Y - c} ${-taiPhuH}
-        L ${X + Y} 0
-        L ${2*X + Y} 0
-        L ${2*X + Y + c} ${-taiPhuH}
-        L ${2*X + 2*Y - c} ${-taiPhuH}
-        L ${2*X + 2*Y} 0
-        L ${2*X + 2*Y} ${Z}
-        L ${2*X + 2*Y - c} ${Z + dayKhoaH}
-        L ${2*X + Y + c} ${Z + dayKhoaH}
-        L ${2*X + Y} ${Z}
-        L ${2*X + Y} ${Z + dayKhoaH}
-        L ${X + Y} ${Z + dayKhoaH}
-        L ${X + Y} ${Z}
-        L ${X + Y - c} ${Z + dayKhoaH}
-        L ${X + c} ${Z + dayKhoaH}
-        L ${X} ${Z}
-        L ${X} ${Z + dayKhoaH}
-        L 0 ${Z + dayKhoaH}
-        L 0 ${Z}
-        L ${-taiDan} ${Z - c}
-        L ${-taiDan} ${c}
-        Z
-      `;
+    panels = [
+      { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
+      { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
+      { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
+      { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+      { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
+      { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: X + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' },
+      { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
+      { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
+      { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
+      { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
+      { cx: 2*X + Y + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' }
+    ];
 
-      creaseLines = [
-        { x1: 0, y1: 0, x2: 0, y2: Z }, 
-        { x1: X, y1: 0, x2: X, y2: Z }, 
-        { x1: X + Y, y1: 0, x2: X + Y, y2: Z }, 
-        { x1: 2*X + Y, y1: 0, x2: 2*X + Y, y2: Z }, 
-        { x1: 0, y1: 0, x2: X, y2: 0 }, 
-        { x1: 0, y1: -Y, x2: X, y2: -Y }, 
-        { x1: X, y1: 0, x2: X + Y, y2: 0 }, 
-        { x1: 2*X + Y, y1: 0, x2: 2*X + 2*Y, y2: 0 }, 
-        { x1: 0, y1: Z, x2: X, y2: Z }, 
-        { x1: X, y1: Z, x2: X + Y, y2: Z }, 
-        { x1: X + Y, y1: Z, x2: 2*X + Y, y2: Z }, 
-        { x1: 2*X + Y, y1: Z, x2: 2*X + 2*Y, y2: Z }  
-      ];
-
-      panels = [
-        { cx: X/2, cy: Z/2, w: X, h: Z, label: 'Mặt trước' },
-        { cx: X/2, cy: -Y/2, w: X, h: Y, label: 'Nắp' },
-        { cx: X/2, cy: -Y - taiGai/2, w: X, h: taiGai, label: 'Tai gài' },
-        { cx: X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
-        { cx: -taiDan/2, cy: Z/2, w: taiDan, h: Z, label: 'Dán' },
-        { cx: X + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-        { cx: X + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-        { cx: X + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' },
-        { cx: X + Y + X/2, cy: Z/2, w: X, h: Z, label: 'Mặt sau' },
-        { cx: X + Y + X/2, cy: Z + dayKhoaH/2, w: X, h: dayKhoaH, label: 'Đáy khoá' },
-        { cx: 2*X + Y + Y/2, cy: Z/2, w: Y, h: Z, label: 'Mặt hông' },
-        { cx: 2*X + Y + Y/2, cy: -taiPhuH/2, w: Y, h: taiPhuH, label: 'Tai phụ' },
-        { cx: 2*X + Y + Y/2, cy: Z + dayKhoaH/2, w: Y, h: dayKhoaH, label: 'Tai đáy' }
-      ];
-
-      vPoints = [
-        { y: minY, val: taiGai },
-        { y: -Y, val: Y },
-        { y: 0, val: Z },
-        { y: Z, val: dayKhoaH },
-        { y: maxY, val: 0 }
-      ];
-    }
+    vPoints = [
+      { y: minY, val: taiGai },
+      { y: -Y, val: Y },
+      { y: 0, val: Z },
+      { y: Z, val: dayKhoaH },
+      { y: maxY, val: 0 }
+    ];
   } else if (boxType === 'nap_cai_day_moc') {
     const dayKhoaH = Y / 2 + taiGai;
     const taiDayH = dayKhoaH * 0.75; // 75% height của đáy theo yêu cầu
     minY = -Y - taiGai;
     maxY = Z + dayKhoaH;
-    overlapY = 0; // Đáy móc chiếm toàn bộ biên dưới, xếp mép chạm mép tương tự hộp dán 2 đầu
-    overlapX = 0;
+    overlapY = Y + taiGai; // Nắp cài có thể lồng vào phần trống dưới mặt trước
 
     outlinePath = `
       M 0 0
@@ -2768,7 +2790,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, isDaoTaiDan = false
     { x: maxX, val: 0 }
   ];
 
-  return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY, overlapX, overlapY };
+  return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY, overlapX, overlapY, taiDan };
 }
 
 // ==========================================
@@ -2916,7 +2938,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, daoTaiDan }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -2926,12 +2948,10 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
   if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return null;
 
-  // Lấy cả 2 biến thể hình học (Tiêu chuẩn và Đảo tai dán)
-  const geomNormal = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, false);
-  const geomDao = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, true);
-  if (!geomNormal) return null;
+  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+  if (!geom) return null;
 
-  const { minX, maxX, minY, maxY, overlapX, overlapY } = geomNormal;
+  const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
   
   const singleW = maxX - minX;
   const singleH = maxY - minY;
@@ -2941,7 +2961,12 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   const stepW = singleW - overlapX + gap;
   const stepH = singleH - overlapY + gap;
 
-  const totalW = singleW + (cCols - 1) * stepW;
+  let extraW = 0;
+  if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1) {
+    extraW = Math.max(0, Y - taiDan);
+  }
+
+  const totalW = singleW + (cCols - 1) * stepW + extraW;
   const totalH = singleH + (cRows - 1) * stepH;
 
   const pad = Math.max(totalW, totalH) * 0.1;
@@ -2978,36 +3003,27 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
         {/* Lặp Lưới Vẽ Các Bát */}
         {Array.from({length: cRows}).map((_, r) => (
           Array.from({length: cCols}).map((_, col) => {
+            let tx = col * stepW - minX;
+            const ty = r * stepH - minY;
             const batId = r * cCols + col + 1;
             
-            // Logic lật bát: Mirror Horizontal + Mirror Vertical = Xoay 180 độ
-            // Áp dụng xếp quay đầu cho hộp Nắp cài đáy khóa ở hàng chẵn
-            const isFlipped = boxType === 'nap_cai_day_khoa' && cRows > 1 && r % 2 === 0;
-            
-            // Nếu là bát bị lật xoay và có tick "Đảo tai dán" -> Dùng bản vẽ geomDao
-            const useDaoTaiDan = daoTaiDan && isFlipped && boxType === 'nap_cai_day_khoa';
-            const currentGeom = useDaoTaiDan && geomDao ? geomDao : geomNormal;
+            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1 && r === 1) {
+              tx += (Y - taiDan);
+            }
 
-            const tx = col * stepW - currentGeom.minX;
-            const ty = r * stepH - currentGeom.minY;
-
-            const cx = (currentGeom.minX + currentGeom.maxX) / 2;
-            const cy = (currentGeom.minY + currentGeom.maxY) / 2;
+            let transformStr = `translate(${tx}, ${ty})`;
             
-            // Xoay group chứa bát 180 độ quanh tâm của nó
-            const transformGroup = isFlipped 
-              ? `translate(${tx}, ${ty}) rotate(180, ${cx}, ${cy})` 
-              : `translate(${tx}, ${ty})`;
-            
-            // Xoay ngược lại con số bên trong để không bị đọc lộn ngược
-            const transformText = isFlipped 
-              ? `rotate(180, ${cx}, ${cy})` 
-              : "";
+            // Xử lý Mirror (flip ngang + flip dọc) cho bát số 1 (r === 0) của cả Nắp cài đáy khóa và Nắp cài đáy móc
+            if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows === 2 && cCols === 1 && r === 0) {
+              const cx = (minX + maxX) / 2;
+              const cy = (minY + maxY) / 2;
+              transformStr += ` translate(${cx}, ${cy}) scale(-1, -1) translate(${-cx}, ${-cy})`;
+            }
 
             return (
-              <g transform={transformGroup} key={`box-${r}-${col}`}>
-                <path d={currentGeom.outlinePath} fill={theme.fill} stroke="none" />
-                {currentGeom.creaseLines.map((line, i) => (
+              <g transform={transformStr} key={`box-${r}-${col}`}>
+                <path d={outlinePath} fill={theme.fill} stroke="none" />
+                {creaseLines.map((line, i) => (
                   <line 
                     key={`crease-${i}`} 
                     x1={line.x1} y1={line.y1} x2={line.x2} y2={line.y2} 
@@ -3016,8 +3032,8 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
                     strokeDasharray={`${strokeW * 3},${strokeW * 3}`} 
                   />
                 ))}
-                <path d={currentGeom.outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
-                <text x={cx} y={cy} transform={transformText} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
+                <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
+                <text x={(minX+maxX)/2} y={(minY+maxY)/2} fill="#3b82f6" opacity="0.15" fontSize={Math.min(singleW, singleH)*0.4} fontWeight="bold" textAnchor="middle" dominantBaseline="middle">
                   {batId}
                 </text>
               </g>
@@ -3044,7 +3060,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [parentSizeIdx, setParentSizeIdx] = useState('');
   const [cols, setCols] = useState(1); // Số bát ngang
   const [rows, setRows] = useState(1); // Số bát dọc
-  const [daoTaiDan, setDaoTaiDan] = useState(false); // Đảo tai dán
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
   const [allowMixed, setAllowMixed] = useState(false);
@@ -3148,7 +3163,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             </button>
           </h3>
           
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
@@ -3156,12 +3171,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
-            </div>
-            <div className="flex items-end pb-2">
-              <label className="flex items-center space-x-1.5 cursor-pointer group">
-                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500 cursor-pointer" checked={daoTaiDan} onChange={(e) => setDaoTaiDan(e.target.checked)} />
-                <span className="text-sm font-medium text-slate-700 group-hover:text-orange-600 transition-colors">Đảo tai dán</span>
-              </label>
             </div>
           </div>
 
@@ -3323,14 +3332,14 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} />
             </div>
 
             <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
               <Sparkles size={48} className="mb-4 opacity-80"/>
-              <p className="font-bold text-lg mb-2 text-orange-800">Content</p>
+              <p className="font-bold text-lg mb-2 text-orange-800">Giao diện đã sẵn sàng!</p>
               <p className="text-sm text-center max-w-md text-orange-700">
-                Section chờ.
+                Bạn hãy cung cấp các công thức và quy tắc ở bước tiếp theo để AI tích hợp logic tính <strong>Kích thước trải, Khuôn bế, Công dán hộp</strong> và báo giá nhé.
               </p>
             </div>
           </>
