@@ -3,7 +3,7 @@ import {
   Settings, Maximize, Printer, Layout, AlertCircle, 
   FileText, X, Copy, Check, RefreshCw, BookOpen, Book, 
   Box, ShoppingBag, Mail, StickyNote, Sparkles, Layers,
-  ChevronDown, ChevronRight
+  ChevronDown, ChevronRight, ZoomIn
 } from 'lucide-react';
 
 // ==========================================
@@ -3096,7 +3096,7 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   const strokeW = vbW * 0.0015;
   const theme = {
     stroke: "#333333",
-    fill: "#f8fafc",
+    fill: "#ffffff",
     crease: "#94a3b8",
     dimText: "#475569",
     dimLine: "#64748b"
@@ -3223,6 +3223,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
   // --- STATES KẾT QUẢ HIỂN THỊ (Tạm thời) ---
   const [isCalculated, setIsCalculated] = useState(false);
+  const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
@@ -3478,6 +3479,13 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
+                <button
+                  onClick={() => setIsZoomModalOpen(true)}
+                  className="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 p-1.5 px-3 rounded-lg transition-colors flex items-center gap-1 text-sm font-medium"
+                  title="Phóng to sơ đồ"
+                >
+                  <ZoomIn size={16} /> <span className="hidden md:inline">Phóng to</span>
+                </button>
               </h2>
               <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
             </div>
@@ -3489,6 +3497,32 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                 Hiển thị báo giá.
               </p>
             </div>
+
+            {/* MODAL PHÓNG TO SƠ ĐỒ KÊU GỌI */}
+            {isZoomModalOpen && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4 md:p-8">
+                <div className="bg-white rounded-2xl shadow-2xl w-full max-w-5xl h-[90vh] flex flex-col overflow-hidden animate-in fade-in zoom-in duration-200">
+                  <div className="flex justify-between items-center p-4 border-b border-slate-200 bg-slate-50 shrink-0">
+                    <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                      <ZoomIn size={20} className="text-blue-600" />
+                      Sơ đồ bình bản khuôn bế - Phóng to
+                    </h3>
+                    <button onClick={() => setIsZoomModalOpen(false)} className="text-slate-500 hover:text-red-500 hover:bg-red-50 p-1.5 rounded-lg transition-colors">
+                      <X size={24} />
+                    </button>
+                  </div>
+                  <div className="flex-1 overflow-auto p-4 md:p-8 bg-[#f8f9fa] flex items-center justify-center custom-scrollbar">
+                    <div className="w-full max-w-full">
+                      <BoxImpositionViewer 
+                        boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} 
+                        cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} 
+                        muonSong={muonSong} daoTaiDan={daoTaiDan} 
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </>
         )}
       </div>
