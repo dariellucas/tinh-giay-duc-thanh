@@ -2847,6 +2847,8 @@ function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
       L ${2*Y + X - c} ${Z + taiDayH}
       L ${Y + X + c} ${Z + taiDayH}
       L ${Y + X} ${Z}
+      L ${Y + X} ${Z + dayKhoaH}
+      L ${Y} ${Z + dayKhoaH}
       L ${Y} ${Z}
       L ${Y - c} ${Z + taiDayH}
       L ${c} ${Z + taiDayH}
@@ -2864,6 +2866,7 @@ function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
       { x1: Y + X, y1: 0, x2: 2*Y + X, y2: 0 },
       { x1: Y, y1: -Y, x2: Y + X, y2: -Y },
       { x1: 0, y1: Z, x2: Y, y2: Z },
+      { x1: Y, y1: Z, x2: Y + X, y2: Z },
       { x1: Y + X, y1: Z, x2: 2*Y + X, y2: Z },
       { x1: 2*Y + X, y1: Z, x2: 2*Y + 2*X, y2: Z }
     ];
