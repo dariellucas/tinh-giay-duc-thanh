@@ -3237,54 +3237,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
   const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
 
-  // Tính toán số đo cụm khuôn
-  const X = parseFloat(boxWidth) || 0;
-  const Y = parseFloat(boxDepth) || 0;
-  const Z = parseFloat(boxHeight) || 0;
-  const cCols = parseInt(cols) || 1;
-  const cRows = parseInt(rows) || 1;
-
-  let layoutWidth = 0;
-  let layoutHeight = 0;
-
-  if (X > 0 && Y > 0 && Z > 0 && cCols > 0 && cRows > 0) {
-    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
-    const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
-
-    if (geom) {
-      const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
-      const singleW = maxX - minX;
-      const singleH = maxY - minY;
-      const gap = muonSong ? 0 : 0.4;
-      const stepW = singleW - overlapX + gap;
-      const stepH = singleH - overlapY + gap;
-
-      let extraW = 0;
-      if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2) {
-        if (daoTaiDan && geomDao) extraW = 0;
-        else extraW = Math.max(0, Y - taiDan);
-      }
-
-      layoutWidth = singleW + (cCols - 1) * stepW + extraW;
-
-      const rowYPositions = [];
-      let currentY = 0;
-      for (let r = 0; r < cRows; r++) {
-        if (r === 0) rowYPositions.push(currentY);
-        else {
-          if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc')) {
-            if (r % 2 === 1) currentY += singleH - overlapY + gap;
-            else currentY += singleH + gap;
-          } else {
-            currentY += stepH;
-          }
-          rowYPositions.push(currentY);
-        }
-      }
-      layoutHeight = cRows > 0 ? rowYPositions[cRows - 1] + singleH : singleH;
-    }
-  }
-
   const handleCalculate = () => {
     setIsCalculated(true);
   };
@@ -3306,7 +3258,23 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={productName} onChange={(e) => setProductName(e.target.value)} />
           </div>
           
-          <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2 mb-4">
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
+              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-slate-700">Loại hộp</label>
+              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={boxType} onChange={(e) => setBoxType(e.target.value)}>
+                <option value="cai_2_dau">Hộp cài 2 đầu</option>
+                <option value="dan_2_dau">Hộp dán 2 đầu</option>
+                <option value="nap_cai_day_khoa">Hộp nắp cài đáy khoá</option>
+                <option value="nap_cai_day_moc">Nắp cài đáy móc</option>
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2">
             <label className="text-xs font-bold text-orange-800 uppercase tracking-wider block">Kích thước thành phẩm (cm)</label>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
@@ -3326,22 +3294,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             {/* COMPONENT 3D VIEWER */}
             <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
           </div>
-
-          <div className="grid grid-cols-2 gap-4 mt-2">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
-              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
-            </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Loại hộp</label>
-              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={boxType} onChange={(e) => setBoxType(e.target.value)}>
-                <option value="cai_2_dau">Hộp cài 2 đầu</option>
-                <option value="dan_2_dau">Hộp dán 2 đầu</option>
-                <option value="nap_cai_day_khoa">Hộp nắp cài đáy khoá</option>
-                <option value="nap_cai_day_moc">Nắp cài đáy móc</option>
-              </select>
-            </div>
-          </div>
         </div>
 
         {/* 2. VẬT TƯ GIẤY & BÌNH BẢN */}
@@ -3354,22 +3306,6 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
           </h3>
           
           <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); }}>
-                {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
-              </select>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Định lượng *</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperGsm} onChange={(e) => setPaperGsm(e.target.value === '' ? '' : Number(e.target.value))} disabled={!paperType}>
-                <option value="" disabled hidden>Chọn Đ.Lượng</option>
-                {availableGsms.map(gsm => <option key={gsm} value={gsm}>{gsm}</option>)}
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
@@ -3389,21 +3325,23 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             </div>
           )}
 
-          {layoutWidth > 0 && layoutHeight > 0 && (
-            <div className="pt-2 mt-2 border-t border-slate-100">
-              <label className="block text-xs font-medium text-orange-700 mb-1 flex items-center">
-                <Layout size={14} className="mr-1" />
-                Số đo cụm khuôn (Ngang x Cao)
-              </label>
-              <div className="w-full p-2.5 bg-orange-50 border border-orange-200 rounded-md text-orange-900 font-bold text-center flex items-center justify-center text-sm shadow-sm">
-                <span>{Number(Math.abs(layoutWidth).toFixed(2))} cm</span>
-                <span className="mx-2 text-orange-300 font-normal">x</span>
-                <span>{Number(Math.abs(layoutHeight).toFixed(2))} cm</span>
-              </div>
+          <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); }}>
+                {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
+              </select>
             </div>
-          )}
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Định lượng *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperGsm} onChange={(e) => setPaperGsm(e.target.value === '' ? '' : Number(e.target.value))} disabled={!paperType}>
+                <option value="" disabled hidden>Chọn Đ.Lượng</option>
+                {availableGsms.map(gsm => <option key={gsm} value={gsm}>{gsm}</option>)}
+              </select>
+            </div>
+          </div>
 
-          <div className="space-y-2 pt-2 border-t border-slate-100">
+          <div className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700">Khổ giấy in (Nguyên khổ) *</label>
             <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value)}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
