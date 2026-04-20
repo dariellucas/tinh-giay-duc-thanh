@@ -3201,6 +3201,11 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [paperType, setPaperType] = useState('Ivory');
   const [paperGsm, setPaperGsm] = useState('');
   const [parentSizeIdx, setParentSizeIdx] = useState('');
+  const [customParentW, setCustomParentW] = useState('');
+  const [customParentH, setCustomParentH] = useState('');
+  const [rollWidth, setRollWidth] = useState('');
+  const [rollSplit, setRollSplit] = useState(1);
+  const [rollCutLength, setRollCutLength] = useState('');
   const [cols, setCols] = useState(1); // Số bát ngang
   const [rows, setRows] = useState(1); // Số bát dọc
   const [daoTaiDan, setDaoTaiDan] = useState(false);
@@ -3236,6 +3241,23 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const availableGsms = paperDatabase && paperDatabase[paperType] 
     ? Object.keys(paperDatabase[paperType]).map(Number).sort((a,b)=>a-b) 
     : [];
+
+  const availableRolls = useMemo(() => {
+    if (paperDatabase && paperType && paperGsm && paperDatabase[paperType][paperGsm]) {
+       return paperDatabase[paperType][paperGsm].rolls || [];
+    }
+    return [];
+  }, [paperDatabase, paperType, paperGsm]);
+
+  useEffect(() => {
+    if (availableRolls.length > 0) {
+      if (!availableRolls.includes(String(rollWidth))) {
+        setRollWidth(availableRolls[0]);
+      }
+    } else {
+      setRollWidth('');
+    }
+  }, [availableRolls, rollWidth]);
 
   const cumKhuonSize = useMemo(() => {
     const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
@@ -3410,11 +3432,44 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
           {/* CHỌN KHỔ GIẤY IN HỘP MỀM */}
           <div className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700">Khổ giấy in (Nguyên khổ) *</label>
-            <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value)}>
+            <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
               {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
+              <option value={PARENT_PAPER_SIZES.length}>Tùy chọn...</option>
+              <option value={PARENT_PAPER_SIZES.length + 1}>Xả lô (Từ cuộn)...</option>
             </select>
           </div>
+          
+          {parentSizeIdx === PARENT_PAPER_SIZES.length && (
+            <div className="grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 mt-2">
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentW} onChange={(e) => setCustomParentW(e.target.value)}/></div>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentH} onChange={(e) => setCustomParentH(e.target.value)}/></div>
+            </div>
+          )}
+          {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
+            <div className="grid grid-cols-3 gap-3 bg-amber-50 p-2.5 rounded-lg border border-amber-200 shadow-inner mt-2">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-800">Khổ lô (cm)</label>
+                {availableRolls.length > 0 ? (
+                  <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm font-semibold text-amber-900" value={rollWidth} onChange={(e) => setRollWidth(e.target.value)}>
+                    {availableRolls.map(r => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                ) : (
+                  <input type="text" className="w-full p-2 border border-amber-200 rounded outline-none text-sm text-slate-400 bg-amber-100" value="Không có lô" disabled />
+                )}
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-800">Chia lô</label>
+                <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm" value={rollSplit} onChange={(e) => setRollSplit(Number(e.target.value))}>
+                  {[1, 2, 3].map(v => <option key={v} value={v}>Chia {v}</option>)}
+                </select>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-amber-800">Chiều dài xả</label>
+                <input type="number" step="0.1" className="w-full p-2 border border-amber-300 rounded outline-none text-sm" placeholder="VD: 30" value={rollCutLength} onChange={(e) => setRollCutLength(e.target.value)}/>
+              </div>
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
             <label className="flex items-center space-x-1.5 cursor-pointer group">
