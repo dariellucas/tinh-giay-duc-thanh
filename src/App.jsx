@@ -3235,6 +3235,8 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   // --- STATES KẾT QUẢ HIỂN THỊ (Tạm thời) ---
   const [isCalculated, setIsCalculated] = useState(false);
   const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState('');
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
@@ -3313,6 +3315,115 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
 
   const handleCalculate = () => {
+    if (!boxWidth || !boxDepth || !boxHeight || !quantity || !paperType || !paperGsm || parentSizeIdx === '' || !selectedPrinter) {
+      setError('Vui lòng điền đầy đủ thông tin kích thước, số lượng, giấy và máy in.');
+      setResult(null);
+      setIsCalculated(false);
+      return;
+    }
+
+    const qty = parseInt(quantity);
+    if (isNaN(qty) || qty <= 0) {
+      setError('Số lượng không hợp lệ.');
+      setResult(null);
+      setIsCalculated(false);
+      return;
+    }
+
+    let Pw = 0, Ph = 0;
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
+      Pw = parseFloat(customParentW) || 0;
+      Ph = parseFloat(customParentH) || 0;
+    } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      Pw = (parseFloat(rollWidth) || 0) / rollSplit;
+      Ph = parseFloat(rollCutLength) || 0;
+    } else {
+      Pw = PARENT_PAPER_SIZES[parentSizeIdx]?.w || 0;
+      Ph = PARENT_PAPER_SIZES[parentSizeIdx]?.h || 0;
+    }
+
+    const reqMax = Math.max(cumKhuonSize.w, cumKhuonSize.h);
+    const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
+    const pMax = Math.max(Pw, Ph);
+    const pMin = Math.min(Pw, Ph);
+
+    if (reqMax > pMax || reqMin > pMin) {
+      setError(`Kích thước cụm khuôn (${reqMax.toFixed(1)} x ${reqMin.toFixed(1)} cm) lớn hơn khổ giấy in (${pMax} x ${pMin} cm). Vui lòng điều chỉnh.`);
+      setResult(null);
+      setIsCalculated(false);
+      return;
+    }
+
+    setError('');
+
+    const itemsPerSheet = cols * rows;
+    const soToInLyThuyet = Math.ceil(qty / itemsPerSheet);
+    const dynamicSpoilage = 100; // Mặc định bù hao hộp
+    const parentSheetsNeeded = soToInLyThuyet + dynamicSpoilage;
+
+    // 1. Tiền giấy
+    const pricePerTon = paperDatabase[paperType] && paperDatabase[paperType][paperGsm] ? paperDatabase[paperType][paperGsm].price : 0; 
+    const areaM2 = (Pw * Ph) / 10000;
+    const weightPerSheetKg = (areaM2 * paperGsm) / 1000;
+    const totalWeightKg = weightPerSheetKg * parentSheetsNeeded;
+    const pricePerKg = pricePerTon * 1000;
+    const tienGiay = totalWeightKg * pricePerKg;
+
+    // Tiền xả lô
+    const getFinishing = (name) => finishingDatabase.find(f => f.item.trim().toLowerCase() === name.trim().toLowerCase());
+    let tienXaLo = 0;
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      const xaLoObj = getFinishing('xả lô');
+      tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
+    }
+
+    // 2. Tiền kẽm & In (Mặc định Hộp mềm in 1 mặt)
+    const soKem = printColors;
+    const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
+    const giaKem = selectedPrinterObj ? parseFloat(selectedPrinterObj.platePrice) || 0 : 0;
+    const tienKem = soKem * giaKem;
+
+    const soLuotInMoiKem = soToInLyThuyet;
+    const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000); 
+    const giaLuotCoBan = selectedPrinterObj ? parseFloat(selectedPrinterObj.runPrice) || 0 : 0;
+    const giaLuot = printColors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
+    const tienIn = quaLuotMoiKem * soKem * giaLuot;
+
+    // 3. Tiền cán màng
+    const haoIn = 30;
+    const haoCan = 20;
+    let tienCan = 0;
+    let canDetail = '';
+    if (lamination !== 'none') {
+      const canName = lamination === 'matte' ? 'cán mờ' : 'cán bóng';
+      const canObj = getFinishing(canName);
+      if (canObj) {
+        const toCan = Math.max(0, parentSheetsNeeded - haoIn - haoCan);
+        const areaCm2 = Pw * Ph;
+        const laminationSides = 1; // Hộp mềm thường cán 1 mặt ngoài
+        const cost = areaCm2 * toCan * laminationSides * parseFloat(canObj.price);
+        tienCan = Math.max(cost, parseFloat(canObj.minPrice));
+        canDetail = `(${toCan.toLocaleString('vi-VN')} tờ × ${laminationSides} mặt × ${areaCm2.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
+      }
+    }
+
+    // 4. Tiền vận chuyển
+    const tienVanChuyen = parseFloat(shippingCost) || 0; 
+
+    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienVanChuyen;
+    const giaBan = giaSanXuat * markup;
+    const donGiaSP = giaBan / qty;
+
+    setResult({
+      itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
+      totalWeightKg, pricePerKg,
+      costs: {
+        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienVanChuyen,
+        giaSanXuat, giaBan, donGiaSP, markup,
+        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail
+      }
+    });
+
     setIsCalculated(true);
   };
 
@@ -3588,6 +3699,12 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
       {/* KHU VỰC PHẢI: KẾT QUẢ & BẢN VẼ */}
       <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shrink-0">
+            <AlertCircle size={24} />
+            <span className="font-medium">{error}</span>
+          </div>
+        )}
         {!(isCalculated || hasValidDimensions) ? (
           <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px] shrink-0">
             <Box size={48} className="mb-4 opacity-50 text-orange-400"/>
@@ -3615,13 +3732,88 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
               <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
             </div>
 
-            <div className="bg-orange-50 border border-orange-200 p-10 rounded-2xl flex flex-col items-center justify-center text-orange-600 min-h-[250px] shrink-0">
-              <Sparkles size={48} className="mb-4 opacity-80"/>
-              <p className="font-bold text-lg mb-2 text-orange-800">Giao diện</p>
-              <p className="text-sm text-center max-w-md text-orange-700">
-                Hiển thị báo giá.
-              </p>
-            </div>
+            {result && (
+              <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-2 shrink-0">
+                <div className="bg-slate-50 px-6 py-3 border-b border-slate-200">
+                  <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Chi tiết báo giá (Dự kiến)</h3>
+                </div>
+                <div className="p-6">
+                  <div className="space-y-1">
+                    <div className="flex justify-between items-start text-sm py-1.5">
+                      <div className="pr-4 text-slate-600">
+                        <span>1. Tiền giấy nguyên liệu:</span>
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienGiay).toLocaleString('vi-VN')} đ</span>
+                    </div>
+
+                    {result.costs.tienXaLo > 0 && (
+                      <div className="flex justify-between items-start text-sm py-1.5">
+                        <div className="pr-4 text-slate-600">
+                          <span>2. Tiền xả lô:</span>
+                        </div>
+                        <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienXaLo).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    <div className="flex justify-between items-start text-sm py-1.5">
+                      <div className="pr-4 text-slate-600">
+                        <span>3. Tiền xuất kẽm</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">({result.costs.soKem} kẽm × {result.costs.giaKem.toLocaleString('vi-VN')}đ)</span>
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKem).toLocaleString('vi-VN')} đ</span>
+                    </div>
+
+                    <div className="flex justify-between items-start text-sm py-1.5">
+                      <div className="pr-4 text-slate-600">
+                        <span>4. Tiền công in</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">
+                          ({result.costs.quaLuotMoiKem > 0 ? `${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ` : 'Miễn phí ≤ 1.000 lượt/kẽm'})
+                        </span>
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienIn).toLocaleString('vi-VN')} đ</span>
+                    </div>
+
+                    <div className="flex justify-between items-start text-sm py-1.5">
+                      <div className="pr-4 text-slate-600">
+                        <span>5. Tiền cán màng</span>
+                        {result.costs.tienCan > 0 && <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.canDetail}</span>}
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienCan).toLocaleString('vi-VN')} đ</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-start text-sm py-1.5 opacity-50">
+                      <div className="pr-4 text-slate-600">
+                        <span>6. Gia công khác (Bế, Dán, Nhũ...):</span>
+                      </div>
+                      <span className="font-medium whitespace-nowrap">Chờ thuật toán...</span>
+                    </div>
+
+                    <div className="flex justify-between items-start text-sm py-1.5 border-b border-slate-100 pb-3">
+                      <div className="pr-4 text-slate-600">
+                        <span>7. Tiền vận chuyển:</span>
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienVanChuyen).toLocaleString('vi-VN')} đ</span>
+                    </div>
+                    
+                    <div className="flex justify-between items-center pt-3">
+                      <span className="font-bold text-slate-700">TỔNG GIÁ SẢN XUẤT:</span>
+                      <span className="font-bold text-lg text-slate-800">{Math.round(result.costs.giaSanXuat).toLocaleString('vi-VN')} đ</span>
+                    </div>
+
+                    <div className="flex justify-between items-center bg-orange-50 p-4 rounded-xl mt-4 border border-orange-100">
+                      <div>
+                        <span className="font-bold text-orange-900 block text-lg">GIÁ BÁN TỔNG</span>
+                        <span className="text-xs text-orange-600 font-medium">Đã nhân hệ số {result.costs.markup}</span>
+                      </div>
+                      <div className="text-right">
+                        <span className="font-bold text-2xl text-orange-700 block">{Math.round(result.costs.giaBan).toLocaleString('vi-VN')} đ</span>
+                        <span className="text-sm font-semibold text-orange-600">~ {Math.round(result.costs.donGiaSP).toLocaleString('vi-VN')} đ/Hộp</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* MODAL PHÓNG TO SƠ ĐỒ KÊU GỌI */}
             {isZoomModalOpen && (
