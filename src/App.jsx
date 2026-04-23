@@ -3032,7 +3032,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, daoTaiDan }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, muonNhip, daoTaiDan, parentW, parentH }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -3093,13 +3093,39 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   }
   const totalH = cRows > 0 ? rowYPositions[cRows - 1] + singleH : singleH;
 
-  const pad = Math.max(totalW, totalH) * 0.1;
-  const vbX = -pad;
-  const vbY = -pad;
-  const vbW = totalW + pad * 2;
-  const vbH = totalH + pad * 2;
+  let pW = parentW || 0;
+  let pH = parentH || 0;
+
+  // Tự động xoay giấy cho khớp với cụm khuôn (mô phỏng thợ xếp giấy)
+  if (pW > 0 && pH > 0) {
+      const paperLong = Math.max(pW, pH);
+      const paperShort = Math.min(pW, pH);
+      if (totalW >= totalH) { pW = paperLong; pH = paperShort; }
+      else { pW = paperShort; pH = paperLong; }
+  }
+
+  // Căn giữa giấy in so với cụm khuôn
+  const paperX = pW > 0 ? (totalW - pW) / 2 : 0;
+  const paperY = pH > 0 ? (totalH - pH) / 2 : 0;
+
+  const finalW = Math.max(totalW, pW);
+  const finalH = Math.max(totalH, pH);
+  const pad = Math.max(finalW, finalH) * 0.1;
+
+  // Tính toán giới hạn ViewBox ôm trọn cả cụm khuôn và giấy in
+  const minVB_X = Math.min(0, paperX) - pad;
+  const minVB_Y = Math.min(0, paperY) - pad;
+  const maxVB_X = Math.max(totalW, paperX + pW) + pad;
+  const maxVB_Y = Math.max(totalH, paperY + pH) + pad;
+
+  const vbX = minVB_X;
+  const vbY = minVB_Y;
+  const vbW = maxVB_X - minVB_X;
+  const vbH = maxVB_Y - minVB_Y;
 
   const strokeW = vbW * 0.0015;
+  const gripperSize = muonNhip ? 0 : 1.0;
+  const MARGIN = 0.2;
   const theme = {
     stroke: "#333333",
     fill: "#ffffff",
@@ -3113,6 +3139,60 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
   return (
     <div className="w-full bg-[#f8f9fa] border border-dashed border-[#cbd5e1] rounded-xl overflow-hidden relative shadow-inner p-4 flex flex-col justify-center items-center mt-2">
       <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[600px] drop-shadow-sm">
+        
+        {/* Vẽ Khung Giấy In (Nằm dưới cùng) */}
+        {pW > 0 && pH > 0 && (
+          <g>
+            {/* Nền giấy trắng, viền liền */}
+            <rect x={paperX} y={paperY} width={pW} height={pH} fill="#ffffff" stroke="#94a3b8" strokeWidth={strokeW * 2} />
+            
+            {/* Xác định cạnh dài và vẽ Nhíp, Vùng an toàn */}
+            {(() => {
+              const isHorizontalLong = pW >= pH;
+              return (
+                <g>
+                  {/* Vẽ Nhíp */}
+                  {gripperSize > 0 && (
+                    <g>
+                      {isHorizontalLong ? (
+                        <rect x={paperX} y={paperY + pH - gripperSize} width={pW} height={gripperSize} fill="#1e293b" opacity="0.8"/>
+                      ) : (
+                        <rect x={paperX + pW - gripperSize} y={paperY} width={gripperSize} height={pH} fill="#1e293b" opacity="0.8"/>
+                      )}
+                      
+                      <text 
+                        x={isHorizontalLong ? paperX + pW / 2 : paperX + pW - (gripperSize/2)} 
+                        y={isHorizontalLong ? paperY + pH - (gripperSize/2) : paperY + pH / 2} 
+                        fill="white" 
+                        fontSize={Math.max(vbW * 0.015, 0.5) * 0.8} 
+                        textAnchor="middle" 
+                        dominantBaseline="middle"
+                        transform={isHorizontalLong ? "" : `rotate(-90 ${paperX + pW - (gripperSize/2)} ${paperY + pH / 2})`}
+                      >
+                        NHÍP ({gripperSize * 10}mm)
+                      </text>
+                    </g>
+                  )}
+
+                  {/* Vùng in an toàn (Lề) */}
+                  <rect 
+                    x={paperX + MARGIN} 
+                    y={paperY + MARGIN} 
+                    width={isHorizontalLong ? pW - (MARGIN * 2) : pW - MARGIN - (gripperSize > 0 ? gripperSize : MARGIN)} 
+                    height={isHorizontalLong ? pH - MARGIN - (gripperSize > 0 ? gripperSize : MARGIN) : pH - (MARGIN * 2)} 
+                    fill="none" 
+                    stroke="#fca5a5" 
+                    strokeWidth={strokeW} 
+                    strokeDasharray={`${strokeW*4},${strokeW*4}`} 
+                  />
+                </g>
+              );
+            })()}
+            
+            <text x={paperX + pW/2} y={paperY - strokeW * 6} fill="#64748b" fontSize={Math.max(vbW * 0.015, 0.5)} fontWeight="bold" textAnchor="middle" dominantBaseline="auto" opacity="0.8">GIẤY IN: {pW} x {pH} cm</text>
+          </g>
+        )}
+
         {/* Vẽ Kích thước tổng */}
         <path d={`M 0 -${pad*0.3} L ${totalW} -${pad*0.3}`} stroke={theme.dimLine} strokeWidth={strokeW} />
         <line x1={0} y1={-pad*0.4} x2={0} y2={-pad*0.2} stroke={theme.dimLine} strokeWidth={strokeW} />
@@ -3206,8 +3286,8 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [rollWidth, setRollWidth] = useState('');
   const [rollSplit, setRollSplit] = useState(1);
   const [rollCutLength, setRollCutLength] = useState('');
-  const [cols, setCols] = useState(1); // Số bát ngang
-  const [rows, setRows] = useState(1); // Số bát dọc
+  const [cols, setCols] = useState(1); // Số bát X
+  const [rows, setRows] = useState(1); // Số bát Y
   const [daoTaiDan, setDaoTaiDan] = useState(false);
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
@@ -3310,6 +3390,110 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
     return { w: totalW, h: totalH };
   }, [boxType, boxWidth, boxDepth, boxHeight, cols, rows, hopMemDatabase, muonSong, daoTaiDan]);
+
+  // --- THÊM MỚI: TỰ ĐỘNG TÍNH TOÁN SỐ BÁT IN KHI THAY ĐỔI KÍCH THƯỚC HOẶC KHỔ GIẤY ---
+  useEffect(() => {
+    const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
+    const X = safeParse(boxWidth);
+    const Y = safeParse(boxDepth);
+    const Z = safeParse(boxHeight);
+    
+    // Nếu chưa nhập đủ kích thước hoặc chưa chọn khổ giấy thì bỏ qua
+    if (X <= 0 || Y <= 0 || Z <= 0 || parentSizeIdx === '') return;
+
+    // Lấy chính xác kích thước khổ giấy in
+    let Pw = 0, Ph = 0;
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
+      Pw = parseFloat(customParentW) || 0;
+      Ph = parseFloat(customParentH) || 0;
+    } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      Pw = (parseFloat(rollWidth) || 0) / rollSplit;
+      Ph = parseFloat(rollCutLength) || 0;
+    } else {
+      Pw = PARENT_PAPER_SIZES[parentSizeIdx]?.w || 0;
+      Ph = PARENT_PAPER_SIZES[parentSizeIdx]?.h || 0;
+    }
+    if (Pw <= 0 || Ph <= 0) return;
+
+    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+    if (!geom) return;
+    const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
+
+    const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
+    const singleW = maxX - minX;
+    const singleH = maxY - minY;
+    const gap = muonSong ? 0 : 0.4;
+    const stepW = singleW - overlapX + gap;
+    const stepH = singleH - overlapY + gap;
+
+    // Thuật toán tìm số hàng tối đa
+    const getMaxRows = (maxH) => {
+      if (singleH > maxH) return 0;
+      let r = 1;
+      let currentY = 0;
+      while (true) {
+        let nextY = currentY;
+        if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc')) {
+           if (r % 2 === 1) nextY += singleH - overlapY + gap;
+           else nextY += singleH + gap;
+        } else {
+           nextY += stepH;
+        }
+        if (nextY + singleH > maxH) break;
+        currentY = nextY;
+        r++;
+      }
+      return r;
+    };
+
+    // Thuật toán tìm số cột tối đa
+    const getMaxCols = (maxW, rCount) => {
+      let extraW = 0;
+      if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && rCount >= 2) {
+        if (daoTaiDan && geomDao) extraW = 0;
+        else extraW = Math.max(0, Y - taiDan);
+      }
+      if (singleW + extraW > maxW) return 0;
+      if (stepW <= 0) return 1;
+      return Math.floor((maxW - singleW - extraW) / stepW) + 1;
+    };
+
+    const tryFit = (paperW, paperH) => {
+      const r = getMaxRows(paperH);
+      if (r === 0) return { c: 0, r: 0, total: 0 };
+      const c = getMaxCols(paperW, r);
+      return { c, r, total: c * r };
+    };
+
+    // Thử tính trên cả 2 chiều xoay của khổ giấy
+    const opt1 = tryFit(Pw, Ph);
+    const opt2 = tryFit(Ph, Pw);
+
+    let bestOpt = opt1.total >= opt2.total ? opt1 : opt2;
+
+    // Tự động cập nhật state nếu tìm được phương án xếp phù hợp
+    if (bestOpt.total > 0) {
+      setCols(prev => (prev !== bestOpt.c ? bestOpt.c : prev));
+      setRows(prev => (prev !== bestOpt.r ? bestOpt.r : prev));
+    }
+  }, [boxType, boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, hopMemDatabase, muonSong, daoTaiDan]);
+  // --- KẾT THÚC THÊM MỚI ---
+
+  // Ghi nhận khổ giấy in hiện tại (dùng để truyền xuống preview bản vẽ thời gian thực)
+  const currentPaperSize = useMemo(() => {
+    let Pw = 0, Ph = 0;
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
+      Pw = parseFloat(customParentW) || 0;
+      Ph = parseFloat(customParentH) || 0;
+    } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      Pw = (parseFloat(rollWidth) || 0) / rollSplit;
+      Ph = parseFloat(rollCutLength) || 0;
+    } else if (parentSizeIdx !== '') {
+      Pw = PARENT_PAPER_SIZES[parentSizeIdx]?.w || 0;
+      Ph = PARENT_PAPER_SIZES[parentSizeIdx]?.h || 0;
+    }
+    return { w: Pw, h: Ph };
+  }, [parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength]);
 
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
   const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
@@ -3511,11 +3695,11 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát ngang</label>
+              <label className="text-xs font-medium text-slate-600">Số bát X</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
             </div>
             <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát dọc</label>
+              <label className="text-xs font-medium text-slate-600">Số bát Y</label>
               <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
             </div>
           </div>
@@ -3542,7 +3726,14 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
           {/* CHỌN KHỔ GIẤY IN HỘP MỀM */}
           <div className="space-y-2 pt-1 border-t border-slate-100">
-            <label className="text-sm font-medium text-slate-700">Khổ giấy in (Nguyên khổ) *</label>
+            <label className="text-sm font-medium text-slate-700 flex justify-between items-center">
+              <span>Khổ giấy in (Nguyên khổ) *</span>
+              {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
+                <span className="text-xs text-amber-600 font-semibold bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
+                  Khổ xả: {(parseFloat(rollWidth) || 0) / rollSplit} x {parseFloat(rollCutLength) || 0} cm
+                </span>
+              )}
+            </label>
             <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
               {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
@@ -3729,7 +3920,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                   <ZoomIn size={16} /> <span className="hidden md:inline">Phóng to</span>
                 </button>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} daoTaiDan={daoTaiDan} />
+              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} parentW={currentPaperSize.w} parentH={currentPaperSize.h} />
             </div>
 
             {result && (
@@ -3833,7 +4024,8 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                       <BoxImpositionViewer 
                         boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} 
                         cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} 
-                        muonSong={muonSong} daoTaiDan={daoTaiDan} 
+                        muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} 
+                        parentW={currentPaperSize.w} parentH={currentPaperSize.h}
                       />
                     </div>
                   </div>
