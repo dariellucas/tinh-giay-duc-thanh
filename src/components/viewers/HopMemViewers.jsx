@@ -1,5 +1,5 @@
 import React from 'react';
-import { ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
+import { Box, ChevronDown, ChevronRight, Layers, Sparkles } from 'lucide-react';
 
 function Box3DViewer({ width, depth, height }) {
   // Thay dấu phẩy thành dấu chấm để parse số thập phân (VD: 7,5 -> 7.5)
@@ -967,4 +967,4 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 }
 
 
-export { Box3DViewer, FlatLayoutViewer, BoxImpositionViewer };
+export { Box3DViewer, FlatLayoutViewer, BoxImpositionViewer, getHopMemGeometry, getHopMemGeometryDao };

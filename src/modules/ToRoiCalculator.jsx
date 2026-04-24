@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Check, Copy, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
+import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
 import { KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
 import ImpositionCanvas from '../components/viewers/ImpositionCanvas';
 

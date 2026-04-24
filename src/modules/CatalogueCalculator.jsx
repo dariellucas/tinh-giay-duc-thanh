@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, BookOpen, Maximize, Printer, RefreshCw } from 'lucide-react';
+import { AlertCircle, BookOpen, Layers, Maximize, Printer, RefreshCw } from 'lucide-react';
 import { BINDING_TYPES, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
 import CatalogueSignatureCanvas from '../components/viewers/CatalogueSignatureCanvas';
 

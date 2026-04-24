@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Box, Maximize, RefreshCw, X, ZoomIn } from 'lucide-react';
 import { LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
-import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer } from '../components/viewers/HopMemViewers';
+import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 
 function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, hopMemDatabase, isLoadingPrices, fetchPaperPrices }) {
   // --- STATES THÔNG TIN CHUNG ---
