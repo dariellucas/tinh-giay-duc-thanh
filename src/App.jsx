@@ -12,8 +12,8 @@ import {
   MARKUP_RATES,
   PARENT_PAPER_SIZES,
   PRODUCT_SIZES,
-} from './src/constants/pricingConstants';
-import { usePricingData } from './src/hooks/usePricingData';
+} from './constants/pricingConstants';
+import { usePricingData } from './hooks/usePricingData';
 
 
 // ==========================================
@@ -4089,3 +4089,4 @@ export default function App() {
     </div>
   );
 }
+
