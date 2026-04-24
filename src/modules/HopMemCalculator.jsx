@@ -311,6 +311,44 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
     }
 
+    const parseVnNumber = (value) => {
+      if (typeof value === 'number') return value;
+      if (value === null || value === undefined) return 0;
+      const raw = String(value).trim();
+      if (!raw) return 0;
+      const normalized = raw.replace(/\./g, '').replace(',', '.');
+      return parseFloat(normalized) || 0;
+    };
+
+    const getGiaCongDonGia = () => {
+      const keyword = boxType === 'nap_cai_day_moc' ? 'hộp mềm móc đáy' : 'hộp mềm số lượng';
+      const candidateRows = (finishingDatabase || []).filter((row) => {
+        const item = String(row?.item || '').toLowerCase();
+        return item.includes(keyword);
+      });
+
+      for (let i = 0; i < candidateRows.length; i++) {
+        const row = candidateRows[i];
+        const itemText = String(row.item || '').toLowerCase();
+        const condMatch = itemText.match(/([<>]=?)\s*([\d\.,]+)/);
+
+        if (!condMatch) continue;
+
+        const operator = condMatch[1];
+        const threshold = parseVnNumber(condMatch[2]);
+        let isMatch = false;
+
+        if (operator === '<' && qty < threshold) isMatch = true;
+        if (operator === '<=' && qty <= threshold) isMatch = true;
+        if (operator === '>' && qty > threshold) isMatch = true;
+        if (operator === '>=' && qty >= threshold) isMatch = true;
+
+        if (isMatch) return parseVnNumber(row.price);
+      }
+
+      return 0;
+    };
+
     // 2. Tiền kẽm & In (Mặc định Hộp mềm in 1 mặt)
     const soKem = printColors;
     const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
@@ -341,13 +379,21 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       }
     }
 
-    // 4. Tiền khuôn bế
+    // 4. Tiền gia công
+    const giaCongDonGia = getGiaCongDonGia();
+    const soLuongGiaCong = qty + 50;
+    const tienGiaCong = soLuongGiaCong * giaCongDonGia;
+    const giaCongDetail = giaCongDonGia > 0
+      ? `(${soLuongGiaCong.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ)`
+      : '(Không tìm thấy đơn giá gia công)';
+
+    // 5. Tiền khuôn bế
     const tienKhuonBe = parseFloat(dieCost) || 0;
 
-    // 5. Tiền vận chuyển
+    // 6. Tiền vận chuyển
     const tienVanChuyen = parseFloat(shippingCost) || 0; 
 
-    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienKhuonBe + tienVanChuyen;
+    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienGiaCong + tienKhuonBe + tienVanChuyen;
     const giaBan = giaSanXuat * markup;
     const donGiaSP = giaBan / qty;
 
@@ -355,9 +401,9 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
       costs: {
-        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienKhuonBe, tienVanChuyen,
+        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
-        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail
+        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail, giaCongDetail
       }
     });
 
@@ -763,14 +809,22 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                     
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
-                        <span>6. Tiền khuôn bế:</span>
+                        <span>6. Tiền gia công:</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.giaCongDetail}</span>
+                      </div>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienGiaCong).toLocaleString('vi-VN')} đ</span>
+                    </div>
+
+                    <div className="flex justify-between items-start text-sm py-1.5">
+                      <div className="pr-4 text-slate-600">
+                        <span>7. Tiền khuôn bế:</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKhuonBe).toLocaleString('vi-VN')} đ</span>
                     </div>
 
                     <div className="flex justify-between items-start text-sm py-1.5 border-b border-slate-100 pb-3">
                       <div className="pr-4 text-slate-600">
-                        <span>7. Tiền vận chuyển:</span>
+                        <span>8. Tiền vận chuyển:</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienVanChuyen).toLocaleString('vi-VN')} đ</span>
                     </div>
