@@ -44,6 +44,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
   const [embossWidth, setEmbossWidth] = useState('');
 
   // --- STATES TÀI CHÍNH ---
+  const [dieCost, setDieCost] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
   const [markup, setMarkup] = useState(1.1);
 
@@ -340,10 +341,13 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       }
     }
 
-    // 4. Tiền vận chuyển
+    // 4. Tiền khuôn bế
+    const tienKhuonBe = parseFloat(dieCost) || 0;
+
+    // 5. Tiền vận chuyển
     const tienVanChuyen = parseFloat(shippingCost) || 0; 
 
-    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienVanChuyen;
+    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienKhuonBe + tienVanChuyen;
     const giaBan = giaSanXuat * markup;
     const donGiaSP = giaBan / qty;
 
@@ -351,7 +355,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
       costs: {
-        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienVanChuyen,
+        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
         soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail
       }
@@ -617,6 +621,10 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
           <h3 className="text-sm font-bold text-slate-800 bg-slate-100 p-2 rounded">5. Tổng hợp tài chính</h3>
           <div className="space-y-3">
             <div className="flex items-center justify-between">
+              <label className="text-sm font-medium text-slate-700">Tiền khuôn bế (VNĐ)</label>
+              <input type="number" className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm text-right font-medium" value={dieCost} onChange={(e) => setDieCost(Number(e.target.value))} />
+            </div>
+            <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Vận chuyển (VNĐ)</label>
               <input type="number" className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm text-right font-medium" value={shippingCost} onChange={(e) => setShippingCost(Number(e.target.value))} />
             </div>
@@ -753,11 +761,11 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienCan).toLocaleString('vi-VN')} đ</span>
                     </div>
                     
-                    <div className="flex justify-between items-start text-sm py-1.5 opacity-50">
+                    <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
-                        <span>6. Gia công khác (Bế, Dán, Nhũ...):</span>
+                        <span>6. Tiền khuôn bế:</span>
                       </div>
-                      <span className="font-medium whitespace-nowrap">Chờ thuật toán...</span>
+                      <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKhuonBe).toLocaleString('vi-VN')} đ</span>
                     </div>
 
                     <div className="flex justify-between items-start text-sm py-1.5 border-b border-slate-100 pb-3">
