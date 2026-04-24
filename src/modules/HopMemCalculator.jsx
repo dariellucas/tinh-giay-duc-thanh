@@ -1,9 +1,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Box, Maximize, RefreshCw, X, ZoomIn } from 'lucide-react';
+import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
 import { LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 
-function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, hopMemDatabase, isLoadingPrices, fetchPaperPrices }) {
+function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, hopMemDatabase, dinhMucDatabase, isLoadingPrices, fetchPaperPrices }) {
   // --- STATES THÔNG TIN CHUNG ---
   const [productName, setProductName] = useState('Hộp mỹ phẩm');
   const [quantity, setQuantity] = useState('1000');
@@ -277,7 +277,21 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
 
     const itemsPerSheet = cols * rows;
     const soToInLyThuyet = Math.ceil(qty / itemsPerSheet);
-    const dynamicSpoilage = 100; // Mặc định bù hao hộp
+    let dynamicSpoilage = 100; // Giá trị mặc định
+    if (dinhMucDatabase && dinhMucDatabase.length > 0) {
+      const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
+      for (let i = 0; i < printSpoilageRules.length; i++) {
+        const rule = printSpoilageRules[i];
+        const fromQ = parseInt(rule.fromQty) || 0;
+        const toQ = parseInt(rule.toQty) || 0;
+        const spoilVal = parseInt(rule.spoilage) || 0;
+
+        if (soToInLyThuyet >= fromQ && soToInLyThuyet <= toQ) {
+          dynamicSpoilage = spoilVal;
+          break;
+        }
+      }
+    }
     const parentSheetsNeeded = soToInLyThuyet + dynamicSpoilage;
 
     // 1. Tiền giấy
@@ -659,6 +673,38 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
             </div>
 
             {result && (
+              <>
+              <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
+                  <span className="text-slate-500 text-sm font-medium mb-1">Số bát (SP/Tờ)</span>
+                  <span className="text-3xl font-bold text-blue-600">{result.itemsPerSheet}</span>
+                  <span className="text-xs text-slate-400 mt-1">{cols} cột × {rows} hàng</span>
+                </div>
+                
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
+                  <span className="text-slate-500 text-sm font-medium mb-1 flex items-center justify-center space-x-1"><Printer size={14}/> <span>Số tờ in</span></span>
+                  <span className="text-3xl font-bold text-slate-700">{result.sheetsNeeded.toLocaleString('vi-VN')}</span>
+                  <span className="text-xs text-slate-400 mt-1">+{result.dynamicSpoilage} tờ bù hao</span>
+                </div>
+
+                <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
+                  <span className="text-slate-500 text-sm font-medium mb-1">Diện tích sử dụng</span>
+                  <span className="text-3xl font-bold text-slate-700">
+                    {currentPaperSize.w > 0 && currentPaperSize.h > 0
+                      ? ((cumKhuonSize.w * cumKhuonSize.h) / (currentPaperSize.w * currentPaperSize.h) * 100).toFixed(1)
+                      : '0.0'}
+                    %
+                  </span>
+                  <span className="text-xs text-slate-400 mt-1">SP xếp xuôi</span>
+                </div>
+
+                <div className="bg-emerald-50 p-4 rounded-2xl shadow-sm border border-emerald-200 flex flex-col justify-center items-center text-center">
+                  <span className="text-emerald-700 text-sm font-medium mb-1">Dự toán tiền giấy</span>
+                  <span className="text-2xl font-bold text-emerald-700">{Math.round(result.costs.tienGiay).toLocaleString('vi-VN')} đ</span>
+                  <span className="text-[11px] text-emerald-600 mt-1">{result.totalWeightKg.toFixed(1)}kg × {result.pricePerKg.toLocaleString('vi-VN')}đ</span>
+                </div>
+              </div>
+
               <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden mt-2 shrink-0">
                 <div className="bg-slate-50 px-6 py-3 border-b border-slate-200">
                   <h3 className="text-sm font-bold text-slate-800 uppercase tracking-wider">Chi tiết báo giá (Dự kiến)</h3>
@@ -739,6 +785,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
                   </div>
                 </div>
               </div>
+              </>
             )}
 
             {/* MODAL PHÓNG TO SƠ ĐỒ KÊU GỌI */}

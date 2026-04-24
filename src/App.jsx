@@ -34,7 +34,7 @@ export default function App() {
       case 'toroi': return <ToRoiCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} priceLoadError={priceLoadError} fetchPaperPrices={fetchPaperPrices} />;
       case 'catalogue': return <CatalogueCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
       case 'vo': return <VoCalculator />;
-      case 'hopmem': return <HopMemCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} hopMemDatabase={hopMemDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
+      case 'hopmem': return <HopMemCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} hopMemDatabase={hopMemDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
       case 'tuigiay': return <TuiGiayCalculator />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
