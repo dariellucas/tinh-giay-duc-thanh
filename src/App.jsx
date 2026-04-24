@@ -5,103 +5,15 @@ import {
   Box, ShoppingBag, Mail, StickyNote, Sparkles, Layers,
   ChevronDown, ChevronRight, ZoomIn
 } from 'lucide-react';
-
-// ==========================================
-// CONSTANTS & DỮ LIỆU CƠ BẢN
-// ==========================================
-const GOOGLE_SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxG6_SjHC3__zrbNV2s5wTr2ngrj_4Az1xcxhpe9xR-KSowPMnwcKF_ro5s3Le-J0/exec'; 
-
-const DEFAULT_PAPER_DATA = [
-  { paperType: "Couche", gsm: 80, price: 22.4, rolls: "62; 65; 72; 79; 86; 109" }, 
-  { paperType: "Couche", gsm: 100, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 120, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 150, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 180, price: 20.8, rolls: "62; 86" }, 
-  { paperType: "Couche", gsm: 200, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 230, price: 20.8, rolls: "79; 109" }, 
-  { paperType: "Couche", gsm: 250, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" },
-  { paperType: "Couche", gsm: 300, price: 20.8, rolls: "62; 65; 72; 79; 86; 102; 109" }, 
-  { paperType: "Couche Matt", gsm: 100, price: 20.8 },
-  { paperType: "Couche Matt", gsm: 120, price: 20.8 },
-  { paperType: "Off", gsm: 200, price: 26.0 }, { paperType: "Off", gsm: 250, price: 26.0 },
-  { paperType: "Ivory", gsm: 210, price: 18.7 }, { paperType: "Ivory", gsm: 230, price: 17.7 },
-  { paperType: "Ivory", gsm: 250, price: 17.7 }, { paperType: "Ivory", gsm: 300, price: 17.7 },
-  { paperType: "Ivory", gsm: 350, price: 17.7 }, { paperType: "Ivory", gsm: 400, price: 17.7 },
-  { paperType: "Duplex", gsm: 250, price: 17.0 }, { paperType: "Duplex", gsm: 270, price: 17.0 },
-  { paperType: "Duplex", gsm: 300, price: 15.8 }, { paperType: "Duplex", gsm: 310, price: 15.8 },
-  { paperType: "Duplex", gsm: 350, price: 15.3 }, { paperType: "Duplex", gsm: 400, price: 15.3 },
-  { paperType: "Duplex", gsm: 450, price: 15.3 }, { paperType: "Kraft trắng", gsm: 100, price: 30.7 },
-  { paperType: "Kraft trắng", gsm: 120, price: 30.7 }, { paperType: "Kraft nâu", gsm: 170, price: 13.6 },
-  { paperType: "Kraft nâu", gsm: 250, price: 17.0 }, { paperType: "Kraft nâu", gsm: 280, price: 17.0 },
-  { paperType: "Kraft nâu", gsm: 300, price: 17.0 }, { paperType: "Kraft nâu", gsm: 350, price: 17.0 },
-  { paperType: "Bãi Bằng", gsm: 60, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 70, price: 25.5 },
-  { paperType: "Bãi Bằng", gsm: 80, price: 25.5 }, { paperType: "Bãi Bằng", gsm: 100, price: 25.5 }
-];
-
-const DEFAULT_PRINTER_DATA = [
-  { id: 'fallback_1', name: '65x86', platePrice: 100000, runPrice: 500000 },
-  { id: 'fallback_2', name: '52x72', platePrice: 80000, runPrice: 400000 },
-  { id: 'fallback_3', name: '72x102', platePrice: 150000, runPrice: 800000 }
-];
-
-const DEFAULT_FINISHING_DATA = [
-  { item: 'Xả lô', price: 0, unit: 'VNĐ / 1 bài', minPrice: 150000 },
-  { item: 'Cán mờ', price: 0.25, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
-  { item: 'Cán bóng', price: 0.23, unit: 'VNĐ / 1 cm2', minPrice: 150000 },
-  { item: 'Gấp vạch', price: 15, unit: 'VNĐ / 1 vạch / 1 tờ', minPrice: 200000 },
-  { item: 'Xén', price: 30000, unit: 'VNĐ / 1 ream', minPrice: 80000 },
-  { item: 'Ghim gáy', price: 15, unit: 'VNĐ / 1 trang', minPrice: 600000 },
-  { item: 'Keo gáy', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1000000 },
-  { item: 'Khâu keo', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1500000 },
-  { item: 'Gáy lò xo A4', price: 4500, unit: 'VNĐ / 1 quyển', minPrice: 300000 },
-  { item: 'Gáy lò xo A5', price: 3500, unit: 'VNĐ / 1 quyển', minPrice: 300000 }
-];
-
-const DEFAULT_DINHMUC_DATA = [
-  { category: 'In', fromQty: 1, toQty: 5000, name: 'Ít', spoilage: 100, unit: 'Tờ in' },
-  { category: 'In', fromQty: 5001, toQty: 7000, name: 'Trung bình', spoilage: 150, unit: 'Tờ in' },
-  { category: 'In', fromQty: 7001, toQty: 10000, name: 'Nhiều', spoilage: 200, unit: 'Tờ in' },
-  { category: 'In', fromQty: 10001, toQty: 9999999999, name: 'Rất nhiều', spoilage: 300, unit: 'Tờ in' }
-];
-
-const PARENT_PAPER_SIZES = [
-  "27 x 52", "36.3 x 39.5", "36 x 52", "32.5 x 43", 
-  "39.5 x 54.5", "43 x 62", "43 x 65", "52 x 72", 
-  "54.5 x 79", "62 x 86", "65 x 86", "72 x 102", "79 x 109"
-].map(size => {
-  const [a, b] = size.split('x').map(s => parseFloat(s.trim()));
-  return { label: size, w: Math.max(a, b), h: Math.min(a, b) };
-});
-
-const PRODUCT_SIZES = [
-  { label: 'A3 (42 x 29.7)', w: 42, h: 29.7 },
-  { label: 'A4 (29.7 x 21)', w: 29.7, h: 21 },
-  { label: 'A5 (21 x 14.8)', w: 21, h: 14.8 },
-  { label: 'Kích thước khác', w: 0, h: 0 }
-];
-
-const KHO_THIEU_SIZES = {
-  0: { w: 41.8, h: 29.7, label: 'A3 thiếu (41.8 x 29.7)' },
-  1: { w: 29.7, h: 20.7, label: 'A4 thiếu (29.7 x 20.7)' },
-  2: { w: 20.7, h: 14.8, label: 'A5 thiếu (20.7 x 14.8)' },
-};
-
-const LAMINATION_TYPES = [
-  { id: 'none', label: 'Không cán' },
-  { id: 'matte', label: 'Cán mờ' },
-  { id: 'glossy', label: 'Cán bóng' }
-];
-
-const MARKUP_RATES = [
-  1.1, 1.15, 1.2, 1.25, 1.3, 1.35, 1.4, 1.45, 1.5, 1.55, 1.6, 1.65, 1.7, 1.75, 1.8
-];
-
-const BINDING_TYPES = [
-  { id: 'ghim', label: 'Ghim gáy' },
-  { id: 'keo', label: 'Keo gáy' },
-  { id: 'khau', label: 'Khâu keo' },
-  { id: 'loxo', label: 'Gáy lò xo' }
-];
+import {
+  BINDING_TYPES,
+  KHO_THIEU_SIZES,
+  LAMINATION_TYPES,
+  MARKUP_RATES,
+  PARENT_PAPER_SIZES,
+  PRODUCT_SIZES,
+} from './src/constants/pricingConstants';
+import { usePricingData } from './src/hooks/usePricingData';
 
 
 // ==========================================
@@ -244,6 +156,9 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
   const validPrinters = useMemo(() => {
     if (!printerDatabase) return [];
     return printerDatabase.filter(p => {
+      if (!p || typeof p.name !== 'string' || p.name.trim() === '') {
+        return false;
+      }
       const normalizedName = p.name.replace(/,/g, '.');
       const match = normalizedName.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/);
       if (match) {
@@ -2447,7 +2362,8 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
       if (w >= fromX && w <= toX) {
         return {
           taiDan: parseFloat(row.taiDan) || fallback.taiDan,
-          taiGai: parseFloat(row.napHop) || fallback.taiGai, 
+          // Ưu tiên field đúng nghĩa (taiGai), fallback napHop để tương thích dữ liệu cũ
+          taiGai: parseFloat(row.taiGai ?? row.napHop) || fallback.taiGai, 
           khoaDayGai: parseFloat(row.khoaDayGai) || fallback.khoaDayGai,
           khoaDayCheo: parseFloat(row.khoaDayCheo) || fallback.khoaDayCheo
         };
@@ -2807,7 +2723,8 @@ function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
       if (w >= fromX && w <= toX) {
         return {
           taiDan: parseFloat(row.taiDan) || fallback.taiDan,
-          taiGai: parseFloat(row.napHop) || fallback.taiGai,
+          // Ưu tiên field đúng nghĩa (taiGai), fallback napHop để tương thích dữ liệu cũ
+          taiGai: parseFloat(row.taiGai ?? row.napHop) || fallback.taiGai,
           khoaDayGai: parseFloat(row.khoaDayGai) || fallback.khoaDayGai,
           khoaDayCheo: parseFloat(row.khoaDayCheo) || fallback.khoaDayCheo
         };
@@ -4059,14 +3976,16 @@ function DecalCalculator() {
 
 export default function App() {
   const [activeTab, setActiveTab] = useState('catalogue'); 
-  
-  const [paperDatabase, setPaperDatabase] = useState(null);
-  const [printerDatabase, setPrinterDatabase] = useState([]);
-  const [finishingDatabase, setFinishingDatabase] = useState([]);
-  const [hopMemDatabase, setHopMemDatabase] = useState([]);
-  const [dinhMucDatabase, setDinhMucDatabase] = useState([]);
-  const [isLoadingPrices, setIsLoadingPrices] = useState(true);
-  const [priceLoadError, setPriceLoadError] = useState('');
+  const {
+    paperDatabase,
+    printerDatabase,
+    finishingDatabase,
+    hopMemDatabase,
+    dinhMucDatabase,
+    isLoadingPrices,
+    priceLoadError,
+    fetchPaperPrices,
+  } = usePricingData();
 
   const TABS = [
     { id: 'toroi', label: 'Tờ rời', icon: FileText },
@@ -4077,99 +3996,6 @@ export default function App() {
     { id: 'phongbi', label: 'Phong bì', icon: Mail },
     { id: 'decal', label: 'Decal', icon: StickyNote },
   ];
-
-  const fetchPaperPrices = async () => {
-    setIsLoadingPrices(true);
-    setPriceLoadError('');
-    try {
-      let rawPapers;
-      let rawPrinters;
-      let rawFinishing;
-      let rawHopMem;
-      let rawDinhMuc;
-
-      try {
-        const response = await fetch(GOOGLE_SHEETS_API_URL, { redirect: 'follow' });
-        const text = await response.text();
-        if (text.trim().startsWith('<')) {
-          throw new Error('Không lấy được dữ liệu. Đang dùng giá dự phòng.');
-        }
-        
-        const json = JSON.parse(text);
-        
-        if (json.papers && json.printers) {
-           rawPapers = json.papers;
-           rawPrinters = json.printers;
-           rawFinishing = json.finishing || DEFAULT_FINISHING_DATA;
-           rawHopMem = json.hopMem || [];
-           rawDinhMuc = json.dinhMuc || DEFAULT_DINHMUC_DATA;
-        } else {
-           rawPapers = json.record ? json.record : json; 
-           rawPrinters = [];
-           rawFinishing = DEFAULT_FINISHING_DATA;
-           rawHopMem = [];
-           rawDinhMuc = DEFAULT_DINHMUC_DATA;
-        }
-
-      } catch (fetchError) {
-        rawPapers = DEFAULT_PAPER_DATA;
-        rawPrinters = DEFAULT_PRINTER_DATA;
-        rawFinishing = DEFAULT_FINISHING_DATA;
-        rawHopMem = [];
-        rawDinhMuc = DEFAULT_DINHMUC_DATA;
-        setPriceLoadError(fetchError.message || 'Mất kết nối. Đang dùng bảng giá dự phòng.');
-      }
-      
-      const formattedData = {};
-      rawPapers.forEach(row => {
-        if (row && row.paperType && String(row.paperType).trim() !== '') {
-          if (!formattedData[row.paperType]) formattedData[row.paperType] = {};
-          
-          let rollArray = [];
-          if (row.rolls) {
-            rollArray = String(row.rolls).split(';').map(s => s.trim()).filter(Boolean);
-          }
-
-          formattedData[row.paperType][row.gsm] = {
-            price: parseFloat(row.price) || 0,
-            rolls: rollArray
-          };
-        }
-      });
-
-      if (Object.keys(formattedData).length === 0) throw new Error('Dữ liệu trống.');
-      setPaperDatabase(formattedData);
-
-      if (rawPrinters && rawPrinters.length > 0) {
-        setPrinterDatabase(rawPrinters);
-      } else {
-        setPrinterDatabase(DEFAULT_PRINTER_DATA);
-      }
-
-      if (rawFinishing && rawFinishing.length > 0) {
-        setFinishingDatabase(rawFinishing);
-      } else {
-        setFinishingDatabase(DEFAULT_FINISHING_DATA);
-      }
-      
-      setHopMemDatabase(rawHopMem);
-
-      if (rawDinhMuc && rawDinhMuc.length > 0) {
-        setDinhMucDatabase(rawDinhMuc);
-      } else {
-        setDinhMucDatabase(DEFAULT_DINHMUC_DATA);
-      }
-
-    } catch (err) {
-      setPriceLoadError('Lỗi tải dữ liệu. Đang dùng bảng giá dự phòng.');
-    } finally {
-      setIsLoadingPrices(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchPaperPrices();
-  }, []);
 
   const renderContent = () => {
     switch (activeTab) {
@@ -4234,6 +4060,21 @@ export default function App() {
 
       <div className="flex-1 flex flex-col xl:h-screen xl:overflow-hidden overflow-y-auto">
         <div className="p-4 md:p-8 w-full flex flex-col flex-1 min-h-0">
+          <div className="md:hidden mb-4 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm shrink-0">
+            <label htmlFor="mobile-tab-select" className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
+              Hệ thống tính giá
+            </label>
+            <select
+              id="mobile-tab-select"
+              value={activeTab}
+              onChange={(e) => setActiveTab(e.target.value)}
+              className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 outline-none"
+            >
+              {TABS.map(tab => (
+                <option key={tab.id} value={tab.id}>{tab.label}</option>
+              ))}
+            </select>
+          </div>
           
           <div className="flex-1 min-h-0">
             {renderContent()}
