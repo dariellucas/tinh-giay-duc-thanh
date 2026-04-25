@@ -2,8 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
 import { KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
 import ImpositionCanvas from '../components/viewers/ImpositionCanvas';
+import { usePricingDataContext } from '../context/PricingDataContext';
+import { findFinishingByName } from '../utils/finishingUtils';
 
-function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, dinhMucDatabase, isLoadingPrices, priceLoadError, fetchPaperPrices }) {
+function ToRoiCalculator() {
+  const {
+    paperDatabase,
+    printerDatabase,
+    finishingDatabase,
+    dinhMucDatabase,
+    isLoadingPrices,
+    fetchPaperPrices,
+  } = usePricingDataContext();
   // --- STATES ---
   const [parentSizeIdx, setParentSizeIdx] = useState('');
   const [customParentW, setCustomParentW] = useState('');
@@ -264,16 +274,14 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
     const areaM2 = (Pw * Ph) / 10000;
     const weightPerSheetKg = (areaM2 * paperGsm) / 1000;
     const totalWeightKg = weightPerSheetKg * parentSheetsNeeded;
-    const pricePerKg = pricePerTon * 1000;
+    const pricePerKg = pricePerTon * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
     const totalCostVnd = totalWeightKg * pricePerKg;
-
-    const getFinishing = (name) => finishingDatabase.find(f => f.item.trim().toLowerCase() === name.trim().toLowerCase());
 
     const tienGiay = totalCostVnd;
 
     let tienXaLo = 0;
     if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      const xaLoObj = getFinishing('xả lô');
+      const xaLoObj = findFinishingByName(finishingDatabase, 'xả lô');
       tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
     }
     
@@ -307,7 +315,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
     let canDetail = '';
     if (lamination !== 'none') {
       const canName = lamination === 'matte' ? 'cán mờ' : 'cán bóng';
-      const canObj = getFinishing(canName);
+      const canObj = findFinishingByName(finishingDatabase, canName);
       if (canObj) {
         const toCan = Math.max(0, parentSheetsNeeded - haoIn - haoCan);
         const areaCm2 = Pw * Ph;
@@ -320,7 +328,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
 
     let tienXen = 0;
     let xenDetail = '';
-    const xenObj = getFinishing('xén');
+    const xenObj = findFinishingByName(finishingDatabase, 'xén');
     if (xenObj) {
       const reams = parentSheetsNeeded / 500;
       const cost = reams * parseFloat(xenObj.price);
@@ -331,7 +339,7 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
     let tienGapVach = 0;
     let gapDetail = '';
     if (foldingLines > 0) {
-      const gapObj = getFinishing('gấp vạch');
+      const gapObj = findFinishingByName(finishingDatabase, 'gấp vạch');
       if (gapObj) {
         const haoCanThucTe = lamination !== 'none' ? haoCan : 0;
         const toGap = Math.max(0, parentSheetsNeeded - haoIn - haoCanThucTe - haoGap);

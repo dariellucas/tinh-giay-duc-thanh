@@ -1,15 +1,9 @@
 import React from 'react';
-import { Book, Mail, ShoppingBag, StickyNote } from 'lucide-react';
+import { Book, Mail, StickyNote } from 'lucide-react';
 
 function VoCalculator() {
   return <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px]">
     <Book size={48} className="mb-4 text-indigo-300"/><p className="text-lg font-medium text-slate-600">Module V?</p><p className="text-sm">�ang ph�t tri?n d?nh m?c in ru?t + b�a + d�ng g�y...</p>
-  </div>;
-}
-
-function TuiGiayCalculator() {
-  return <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px]">
-    <ShoppingBag size={48} className="mb-4 text-rose-300"/><p className="text-lg font-medium text-slate-600">Module T�i Gi?y</p><p className="text-sm">�ang ph�t tri?n c�ng th?c tr?i t�i gi?y (h�ng, d�y, tai x? d�y)...</p>
   </div>;
 }
 
@@ -25,4 +19,4 @@ function DecalCalculator() {
   </div>;
 }
 
-export { VoCalculator, TuiGiayCalculator, PhongBiCalculator, DecalCalculator };
+export { VoCalculator, PhongBiCalculator, DecalCalculator };

@@ -1,29 +1,33 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
+import { AlertCircle, Box, Maximize, Printer, RefreshCw, ShoppingBag, X, ZoomIn } from 'lucide-react';
 import { LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
-import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
+import { Box3DViewer } from '../components/viewers/HopMemViewers';
+import { computeTuiGiayKhuonUnit, TuiGiayFlatLayoutViewer, TuiGiayImpositionViewer } from '../components/viewers/TuiGiayViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { findFinishingByName } from '../utils/finishingUtils';
 import { safeParseNumber } from '../utils/numberUtils';
 
-function HopMemCalculator() {
+function TuiGiayCalculator() {
   const {
     paperDatabase,
     printerDatabase,
     finishingDatabase,
-    hopMemDatabase,
     dinhMucDatabase,
     isLoadingPrices,
     fetchPaperPrices,
   } = usePricingDataContext();
   // --- STATES THÔNG TIN CHUNG ---
-  const [productName, setProductName] = useState('Hộp mỹ phẩm');
+  const [productName, setProductName] = useState('Túi giấy');
   const [quantity, setQuantity] = useState('1000');
-  const [boxType, setBoxType] = useState('cai_2_dau');
   const [boxWidth, setBoxWidth] = useState('13'); // Ngang
   const [boxDepth, setBoxDepth] = useState('8'); // Hông
   const [boxHeight, setBoxHeight] = useState('8'); // Cao
+  const [gapMiec, setGapMiec] = useState('4');
+  const [taiDanStr, setTaiDanStr] = useState('2');
+  const [matTui, setMatTui] = useState('giong_nhau');
+  const [soManh, setSoManh] = useState('1_manh');
+  const [quai, setQuai] = useState('day_du_thuong');
 
   // --- STATES GIẤY & BÌNH BẢN ---
   const [paperType, setPaperType] = useState('Ivory');
@@ -36,7 +40,6 @@ function HopMemCalculator() {
   const [rollCutLength, setRollCutLength] = useState('');
   const [cols, setCols] = useState(1); // Số bát X
   const [rows, setRows] = useState(1); // Số bát Y
-  const [daoTaiDan, setDaoTaiDan] = useState(false);
   const [muonSong, setMuonSong] = useState(false);
   const [muonNhip, setMuonNhip] = useState(false);
   const [allowMixed, setAllowMixed] = useState(false);
@@ -90,8 +93,13 @@ function HopMemCalculator() {
     }
   }, [availableRolls, rollWidth]);
 
+  useEffect(() => {
+    if (paperType.startsWith('Kraft')) setGapMiec('0');
+    else setGapMiec('4');
+  }, [paperType]);
+
   const debouncedAutoFitInputs = useDebounce(
-    [boxType, boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, daoTaiDan],
+    [boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, gapMiec, taiDanStr, soManh],
     300,
   );
 
@@ -104,49 +112,21 @@ function HopMemCalculator() {
 
     if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return { w: 0, h: 0 };
 
-    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
-    if (!geom) return { w: 0, h: 0 };
-
-    const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
-    const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
-    
-    const singleW = maxX - minX;
-    const singleH = maxY - minY;
+    const spec = computeTuiGiayKhuonUnit(X, Y, Z, safeParseNumber(taiDanStr), safeParseNumber(gapMiec), soManh);
+    const { singleW, singleH } = spec;
     const gap = muonSong ? 0 : 0.4;
+    const stepW = singleW + gap;
+    const stepH = singleH + gap;
 
-    const stepW = singleW - overlapX + gap;
-    const stepH = singleH - overlapY + gap;
-
-    let extraW = 0;
-    if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2) {
-      if (daoTaiDan && geomDao) {
-        extraW = 0;
-      } else {
-        extraW = Math.max(0, Y - taiDan);
-      }
-    }
-
-    const totalW = singleW + (cCols - 1) * stepW + extraW;
-    
-    let currentY = 0;
-    for (let r = 0; r < cRows; r++) {
-      if (r > 0) {
-        if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc')) {
-          if (r % 2 === 1) currentY += singleH - overlapY + gap;
-          else currentY += singleH + gap;
-        } else {
-          currentY += stepH;
-        }
-      }
-    }
-    const totalH = currentY + singleH;
+    const totalW = singleW + (cCols - 1) * stepW;
+    const totalH = singleH + (cRows - 1) * stepH;
 
     return { w: totalW, h: totalH };
-  }, [boxType, boxWidth, boxDepth, boxHeight, cols, rows, hopMemDatabase, muonSong, daoTaiDan]);
+  }, [boxWidth, boxDepth, boxHeight, cols, rows, muonSong, gapMiec, taiDanStr, soManh]);
 
   // --- THÊM MỚI: TỰ ĐỘNG TÍNH TOÁN SỐ BÁT IN KHI THAY ĐỔI KÍCH THƯỚC HOẶC KHỔ GIẤY ---
   useEffect(() => {
-    const [dBoxType, dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dDaoTaiDan] = debouncedAutoFitInputs;
+    const [dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dGapMiec, dTaiDanStr, dSoManh] = debouncedAutoFitInputs;
     const X = safeParseNumber(dBoxWidth);
     const Y = safeParseNumber(dBoxDepth);
     const Z = safeParseNumber(dBoxHeight);
@@ -168,53 +148,38 @@ function HopMemCalculator() {
     }
     if (Pw <= 0 || Ph <= 0) return;
 
-    const geom = getHopMemGeometry(dBoxType, X, Y, Z, hopMemDatabase);
-    if (!geom) return;
-    const geomDao = getHopMemGeometryDao(dBoxType, X, Y, Z, hopMemDatabase);
-
-    const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
-    const singleW = maxX - minX;
-    const singleH = maxY - minY;
+    const spec = computeTuiGiayKhuonUnit(X, Y, Z, safeParseNumber(dTaiDanStr), safeParseNumber(dGapMiec), dSoManh);
+    const { singleW, singleH } = spec;
     const gap = dMuonSong ? 0 : 0.4;
-    const stepW = singleW - overlapX + gap;
-    const stepH = singleH - overlapY + gap;
+    const stepW = singleW + gap;
+    const stepH = singleH + gap;
 
-    // Thuật toán tìm số hàng tối đa
     const getMaxRows = (maxH) => {
       if (singleH > maxH) return 0;
       let r = 1;
-      let currentY = 0;
-      while (true) {
-        let nextY = currentY;
-        if ((dBoxType === 'nap_cai_day_khoa' || dBoxType === 'nap_cai_day_moc')) {
-           if (r % 2 === 1) nextY += singleH - overlapY + gap;
-           else nextY += singleH + gap;
-        } else {
-           nextY += stepH;
-        }
-        if (nextY + singleH > maxH) break;
-        currentY = nextY;
+      let usedH = singleH;
+      while (usedH + gap + singleH <= maxH) {
+        usedH += gap + singleH;
         r++;
       }
       return r;
     };
 
-    // Thuật toán tìm số cột tối đa
-    const getMaxCols = (maxW, rCount) => {
-      let extraW = 0;
-      if ((dBoxType === 'nap_cai_day_khoa' || dBoxType === 'nap_cai_day_moc') && rCount >= 2) {
-        if (dDaoTaiDan && geomDao) extraW = 0;
-        else extraW = Math.max(0, Y - taiDan);
+    const getMaxCols = (maxW) => {
+      if (singleW > maxW) return 0;
+      let c = 1;
+      let usedW = singleW;
+      while (usedW + gap + singleW <= maxW) {
+        usedW += gap + singleW;
+        c++;
       }
-      if (singleW + extraW > maxW) return 0;
-      if (stepW <= 0) return 1;
-      return Math.floor((maxW - singleW - extraW) / stepW) + 1;
+      return c;
     };
 
     const tryFit = (paperW, paperH) => {
       const r = getMaxRows(paperH);
       if (r === 0) return { c: 0, r: 0, total: 0 };
-      const c = getMaxCols(paperW, r);
+      const c = getMaxCols(paperW);
       return { c, r, total: c * r };
     };
 
@@ -229,7 +194,7 @@ function HopMemCalculator() {
       setCols(prev => (prev !== bestOpt.c ? bestOpt.c : prev));
       setRows(prev => (prev !== bestOpt.r ? bestOpt.r : prev));
     }
-  }, [debouncedAutoFitInputs, hopMemDatabase]);
+  }, [debouncedAutoFitInputs]);
   // --- KẾT THÚC THÊM MỚI ---
 
   // Ghi nhận khổ giấy in hiện tại (dùng để truyền xuống preview bản vẽ thời gian thực)
@@ -328,7 +293,7 @@ function HopMemCalculator() {
     }
 
     const getGiaCongRule = () => {
-      const keyword = boxType === 'nap_cai_day_moc' ? 'hộp mềm móc đáy' : 'hộp mềm số lượng';
+      const keyword = 'hộp mềm số lượng';
       const candidateRows = (finishingDatabase || []).filter((row) => {
         const item = String(row?.item || '').toLowerCase();
         return item.includes(keyword);
@@ -412,7 +377,7 @@ function HopMemCalculator() {
       if (canObj) {
         const toCan = Math.max(0, parentSheetsNeeded - haoIn - haoCan);
         const areaCm2 = Pw * Ph;
-        const laminationSides = 1; // Hộp mềm thường cán 1 mặt ngoài
+        const laminationSides = 1; // Túi giấy: tạm cán 1 mặt (Mặt túi sẽ nối sau)
         const cost = areaCm2 * toCan * laminationSides * parseFloat(canObj.price);
         tienCan = Math.max(cost, parseFloat(canObj.minPrice));
         canDetail = `(${toCan.toLocaleString('vi-VN')} tờ × ${laminationSides} mặt × ${areaCm2.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
@@ -445,6 +410,7 @@ function HopMemCalculator() {
     setResult({
       itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
+      matTui, soManh, quai,
       costs: {
         tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
@@ -460,8 +426,8 @@ function HopMemCalculator() {
       {/* KHU VỰC TRÁI: FORM NHẬP LIỆU */}
       <div className="xl:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
         <h2 className="text-lg font-semibold flex items-center space-x-2 border-b pb-3 shrink-0">
-          <Box size={20} className="text-orange-500"/>
-          <span>Thông Số Hộp Mềm</span>
+          <ShoppingBag size={20} className="text-orange-500"/>
+          <span>Thông số Túi giấy</span>
         </h2>
 
         {/* 1. THÔNG TIN CHUNG */}
@@ -493,18 +459,44 @@ function HopMemCalculator() {
             <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
-              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Số lượng túi *</label>
+            <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Gấp miệng (cm)</label>
+              <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={gapMiec} onChange={(e) => setGapMiec(e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Loại hộp</label>
-              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={boxType} onChange={(e) => setBoxType(e.target.value)}>
-                <option value="cai_2_dau">Hộp cài 2 đầu</option>
-                <option value="dan_2_dau">Hộp dán 2 đầu</option>
-                <option value="nap_cai_day_khoa">Hộp nắp cài đáy khoá</option>
-                <option value="nap_cai_day_moc">Nắp cài đáy móc</option>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Tai dán (cm)</label>
+              <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={taiDanStr} onChange={(e) => setTaiDanStr(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Mặt túi *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={matTui} onChange={(e) => setMatTui(e.target.value)}>
+                <option value="giong_nhau">Giống nhau</option>
+                <option value="khac_nhau">Khác nhau</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số mảnh</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={soManh} onChange={(e) => setSoManh(e.target.value)}>
+                <option value="1_manh">1 mảnh</option>
+                <option value="2_manh">2 mảnh</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Quai</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={quai} onChange={(e) => setQuai(e.target.value)}>
+                <option value="day_du_thuong">Dây dù thường</option>
+                <option value="day_du_dep">Dây dù đẹp</option>
+                <option value="day_lua">Dây lụa</option>
+                <option value="quai_giay">Quai giấy</option>
               </select>
             </div>
           </div>
@@ -548,15 +540,6 @@ function HopMemCalculator() {
             </div>
           </div>
 
-          {(boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && (
-            <div className="pt-1">
-              <label className="flex items-center space-x-1.5 cursor-pointer group w-fit">
-                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={daoTaiDan} onChange={(e) => setDaoTaiDan(e.target.checked)} />
-                <span className="text-sm font-medium text-slate-700">Đảo tai dán</span>
-              </label>
-            </div>
-          )}
-
           <div className="space-y-1 pt-2">
             <label className="text-xs font-bold text-orange-800">Số đo cụm khuôn (cm)</label>
             <div className="w-full p-2.5 bg-orange-100 border border-orange-200 rounded-lg text-sm font-bold text-orange-900 text-center shadow-inner">
@@ -568,7 +551,7 @@ function HopMemCalculator() {
           
 
 
-          {/* CHỌN KHỔ GIẤY IN HỘP MỀM */}
+          {/* CHỌN KHỔ GIẤY IN */}
           <div className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700 flex justify-between items-center">
               <span>Khổ giấy in (Nguyên khổ) *</span>
@@ -732,7 +715,7 @@ function HopMemCalculator() {
           onClick={handleCalculate} 
           className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-xl transition-colors flex justify-center items-center space-x-2 shadow-sm mt-4 shrink-0"
         >
-          <Maximize size={18} /><span>Tính toán & Phân trang hộp</span>
+          <Maximize size={18} /><span>Tính toán & Phân trang túi</span>
         </button>
       </div>
 
@@ -747,8 +730,8 @@ function HopMemCalculator() {
         {!(isCalculated || hasValidDimensions) ? (
           <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px] shrink-0">
             <Box size={48} className="mb-4 opacity-50 text-orange-400"/>
-            <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Hộp mềm</p>
-            <p className="text-sm mt-1">Nhập đầy đủ kích thước hộp để tự động xem bản vẽ kỹ thuật.</p>
+            <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Túi giấy</p>
+            <p className="text-sm mt-1">Nhập đầy đủ kích thước túi để tự động xem bản vẽ kỹ thuật.</p>
           </div>
         ) : (
           <>
@@ -756,7 +739,15 @@ function HopMemCalculator() {
               <h2 className="text-lg font-semibold mb-2 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Bản vẽ kỹ thuật (Flat Layout)</span>
               </h2>
-              <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
+              <TuiGiayFlatLayoutViewer
+                width={boxWidth}
+                depth={boxDepth}
+                height={boxHeight}
+                gapMiec={gapMiec}
+                taiDan={taiDanStr}
+                soManh={soManh}
+                matTui={matTui}
+              />
               
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
@@ -768,7 +759,20 @@ function HopMemCalculator() {
                   <ZoomIn size={16} /> <span className="hidden md:inline">Phóng to</span>
                 </button>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} parentW={currentPaperSize.w} parentH={currentPaperSize.h} />
+              <TuiGiayImpositionViewer
+                width={boxWidth}
+                depth={boxDepth}
+                height={boxHeight}
+                gapMiec={gapMiec}
+                taiDan={taiDanStr}
+                soManh={soManh}
+                cols={cols}
+                rows={rows}
+                muonSong={muonSong}
+                muonNhip={muonNhip}
+                parentW={currentPaperSize.w}
+                parentH={currentPaperSize.h}
+              />
             </div>
 
             {result && (
@@ -886,7 +890,7 @@ function HopMemCalculator() {
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-2xl text-orange-700 block">{Math.round(result.costs.giaBan).toLocaleString('vi-VN')} đ</span>
-                        <span className="text-sm font-semibold text-orange-600">~ {Math.round(result.costs.donGiaSP).toLocaleString('vi-VN')} đ/Hộp</span>
+                        <span className="text-sm font-semibold text-orange-600">~ {Math.round(result.costs.donGiaSP).toLocaleString('vi-VN')} đ/Túi</span>
                       </div>
                     </div>
                   </div>
@@ -910,11 +914,19 @@ function HopMemCalculator() {
                   </div>
                   <div className="flex-1 overflow-auto p-4 md:p-8 bg-[#f8f9fa] flex items-center justify-center custom-scrollbar">
                     <div className="w-full max-w-full">
-                      <BoxImpositionViewer 
-                        boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} 
-                        cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} 
-                        muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} 
-                        parentW={currentPaperSize.w} parentH={currentPaperSize.h}
+                      <TuiGiayImpositionViewer
+                        width={boxWidth}
+                        depth={boxDepth}
+                        height={boxHeight}
+                        gapMiec={gapMiec}
+                        taiDan={taiDanStr}
+                        soManh={soManh}
+                        cols={cols}
+                        rows={rows}
+                        muonSong={muonSong}
+                        muonNhip={muonNhip}
+                        parentW={currentPaperSize.w}
+                        parentH={currentPaperSize.h}
                       />
                     </div>
                   </div>
@@ -929,4 +941,4 @@ function HopMemCalculator() {
 }
 
 
-export default HopMemCalculator;
+export default TuiGiayCalculator;

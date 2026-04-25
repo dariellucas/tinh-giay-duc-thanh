@@ -130,7 +130,7 @@ function Box3DViewer({ width, depth, height }) {
 // ==========================================
 // TÍNH TOÁN HÌNH HỌC HỘP MỀM
 // ==========================================
-function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
+function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, dimensionOverrides) {
   const getBoxConfig = (w, db) => {
     const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
     if (!db || !Array.isArray(db) || db.length === 0) return fallback;
@@ -154,9 +154,17 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   };
 
   const boxConfig = getBoxConfig(X, hopMemDatabase);
-  const taiGai = boxConfig.taiGai;
-  const taiDan = boxConfig.taiDan;
-  
+  let taiGai = boxConfig.taiGai;
+  let taiDan = boxConfig.taiDan;
+  if (dimensionOverrides) {
+    if (typeof dimensionOverrides.taiGai === 'number' && !Number.isNaN(dimensionOverrides.taiGai) && dimensionOverrides.taiGai >= 0) {
+      taiGai = dimensionOverrides.taiGai;
+    }
+    if (typeof dimensionOverrides.taiDan === 'number' && !Number.isNaN(dimensionOverrides.taiDan) && dimensionOverrides.taiDan >= 0) {
+      taiDan = dimensionOverrides.taiDan;
+    }
+  }
+
   const thuGoc = 0.2;
   const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
   const c = thuGoc; // Độ vát góc (chamfer) cho các tai gài, tai dán
@@ -493,7 +501,7 @@ function getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase) {
   return { outlinePath, creaseLines, panels, vPoints, hPoints, minX, maxX, minY, maxY, overlapX, overlapY, taiDan };
 }
 
-function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
+function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase, dimensionOverrides) {
   const getBoxConfig = (w, db) => {
     const fallback = { taiDan: 1.5, taiGai: 1.5, khoaDayGai: 0, khoaDayCheo: 0 };
     if (!db || !Array.isArray(db) || db.length === 0) return fallback;
@@ -515,8 +523,16 @@ function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
   };
 
   const boxConfig = getBoxConfig(X, hopMemDatabase);
-  const taiGai = boxConfig.taiGai;
-  const taiDan = boxConfig.taiDan;
+  let taiGai = boxConfig.taiGai;
+  let taiDan = boxConfig.taiDan;
+  if (dimensionOverrides) {
+    if (typeof dimensionOverrides.taiGai === 'number' && !Number.isNaN(dimensionOverrides.taiGai) && dimensionOverrides.taiGai >= 0) {
+      taiGai = dimensionOverrides.taiGai;
+    }
+    if (typeof dimensionOverrides.taiDan === 'number' && !Number.isNaN(dimensionOverrides.taiDan) && dimensionOverrides.taiDan >= 0) {
+      taiDan = dimensionOverrides.taiDan;
+    }
+  }
   const thuGoc = 0.2;
   const taiPhuH = Math.min((Y + taiGai) / 2, X / 2);
   const c = thuGoc;
@@ -588,7 +604,7 @@ function getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase) {
 // ==========================================
 // COMPONENT VẼ TRẢI PHẲNG (FLAT LAYOUT SVG)
 // ==========================================
-function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
+function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase, dimensionOverrides }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -598,7 +614,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
     return null; // Không vẽ nếu chưa nhập đủ kích thước
   }
 
-  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, dimensionOverrides);
 
   if (!geom) {
     return (
@@ -730,7 +746,7 @@ function FlatLayoutViewer({ boxType, width, depth, height, hopMemDatabase }) {
 // ==========================================
 // COMPONENT VẼ BÌNH BẢN (IMPOSITION LAYOUT)
 // ==========================================
-function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, muonNhip, daoTaiDan, parentW, parentH }) {
+function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMemDatabase, muonSong, muonNhip, daoTaiDan, parentW, parentH, dimensionOverrides }) {
   const safeParse = (val) => parseFloat(String(val).replace(',', '.')) || 0;
   const X = safeParse(width);
   const Y = safeParse(depth);
@@ -740,10 +756,10 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
   if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return null;
 
-  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+  const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase, dimensionOverrides);
   if (!geom) return null;
 
-  const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
+  const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase, dimensionOverrides);
 
   const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
   

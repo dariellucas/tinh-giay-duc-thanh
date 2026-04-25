@@ -2,8 +2,18 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BookOpen, Layers, Maximize, Printer, RefreshCw } from 'lucide-react';
 import { BINDING_TYPES, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
 import CatalogueSignatureCanvas from '../components/viewers/CatalogueSignatureCanvas';
+import { usePricingDataContext } from '../context/PricingDataContext';
+import { findFinishingByName } from '../utils/finishingUtils';
 
-function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase, dinhMucDatabase, isLoadingPrices, fetchPaperPrices }) {
+function CatalogueCalculator() {
+  const {
+    paperDatabase,
+    printerDatabase,
+    finishingDatabase,
+    dinhMucDatabase,
+    isLoadingPrices,
+    fetchPaperPrices,
+  } = usePricingDataContext();
   // --- STATES CHUNG ---
   const [productName, setProductName] = useState('Catalogue nội thất 2024');
   const [quantity, setQuantity] = useState('500');
@@ -421,7 +431,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
       const pricePerTon = paperDatabase[sig.paperType] && paperDatabase[sig.paperType][sig.paperGsm] 
         ? paperDatabase[sig.paperType][sig.paperGsm].price 
         : 0; 
-      const pricePerKg = pricePerTon * 1000;
+      const pricePerKg = pricePerTon * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
       const sigCostVnd = totalWeightKg * pricePerKg;
 
       tongTrongLuongKg += totalWeightKg;
@@ -513,8 +523,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
         }
     }
 
-    const getFinishing = (name) => finishingDatabase.find(f => f.item.trim().toLowerCase() === name.trim().toLowerCase());
-    const xaLoObj = getFinishing('xả lô');
+    const xaLoObj = findFinishingByName(finishingDatabase, 'xả lô');
     const minXaLoPrice = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
 
     let tienXaLoBia = 0, tienXaLoRuot = 0;
@@ -527,7 +536,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
 
     if (coverLamination !== 'none' && toCanBia > 0) {
         const canName = coverLamination === 'matte' ? 'cán mờ' : 'cán bóng';
-        const canObj = getFinishing(canName);
+        const canObj = findFinishingByName(finishingDatabase, canName);
         if (canObj) {
             const totalArea = areaBia * toCanBia * coverLaminationSides;
             const cost = totalArea * parseFloat(canObj.price);
@@ -538,7 +547,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
 
     if (!isCombinedPrint && innerLamination !== 'none' && toCanRuot > 0) {
         const canName = innerLamination === 'matte' ? 'cán mờ' : 'cán bóng';
-        const canObj = getFinishing(canName);
+        const canObj = findFinishingByName(finishingDatabase, canName);
         if (canObj) {
             const totalArea = areaRuot * toCanRuot * innerLaminationSides;
             const cost = totalArea * parseFloat(canObj.price);
@@ -553,7 +562,7 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
     // Tính tổng số ream giấy sử dụng (chỉ tính giấy ruột hoặc tổng giấy nếu gộp)
     let xenDetail = '';
     let tienXen = 0;
-    const xenObj = getFinishing('xén');
+    const xenObj = findFinishingByName(finishingDatabase, 'xén');
     if (xenObj) {
         const reams = tongSoToIn / 500;
         const cost = reams * parseFloat(xenObj.price);
@@ -594,9 +603,9 @@ function CatalogueCalculator({ paperDatabase, printerDatabase, finishingDatabase
         defaultMin = 300000;
     }
 
-    let finishingObj = getFinishing(bindingNameDb);
+    let finishingObj = findFinishingByName(finishingDatabase, bindingNameDb);
     if (!finishingObj && bindingType === 'loxo') {
-        finishingObj = getFinishing('Gáy lò xo'); 
+        finishingObj = findFinishingByName(finishingDatabase, 'Gáy lò xo'); 
     }
 
     const actualPrice = finishingObj ? parseFloat(finishingObj.price) : defaultPrice;

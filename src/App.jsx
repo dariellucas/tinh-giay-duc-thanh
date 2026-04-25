@@ -1,23 +1,17 @@
-import React, { useState } from 'react';
+import React, { Suspense, lazy, useState } from 'react';
 import { BookOpen, Book, Box, FileText, Layout, Mail, ShoppingBag, StickyNote } from 'lucide-react';
-import { usePricingData } from './hooks/usePricingData';
-import ToRoiCalculator from './modules/ToRoiCalculator';
-import CatalogueCalculator from './modules/CatalogueCalculator';
-import HopMemCalculator from './modules/HopMemCalculator';
-import { DecalCalculator, PhongBiCalculator, TuiGiayCalculator, VoCalculator } from './modules/PlaceholderCalculators';
+import ErrorBoundary from './components/ErrorBoundary';
+import { PricingDataProvider, usePricingDataContext } from './context/PricingDataContext';
+import { DecalCalculator, PhongBiCalculator, VoCalculator } from './modules/PlaceholderCalculators';
 
-export default function App() {
+const ToRoiCalculator = lazy(() => import('./modules/ToRoiCalculator'));
+const CatalogueCalculator = lazy(() => import('./modules/CatalogueCalculator'));
+const HopMemCalculator = lazy(() => import('./modules/HopMemCalculator'));
+const TuiGiayCalculator = lazy(() => import('./modules/TuiGiayCalculator'));
+
+function AppShell() {
   const [activeTab, setActiveTab] = useState('catalogue'); 
-  const {
-    paperDatabase,
-    printerDatabase,
-    finishingDatabase,
-    hopMemDatabase,
-    dinhMucDatabase,
-    isLoadingPrices,
-    priceLoadError,
-    fetchPaperPrices,
-  } = usePricingData();
+  const { priceLoadError } = usePricingDataContext();
 
   const TABS = [
     { id: 'toroi', label: 'Tờ rời', icon: FileText },
@@ -31,14 +25,14 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'toroi': return <ToRoiCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} priceLoadError={priceLoadError} fetchPaperPrices={fetchPaperPrices} />;
-      case 'catalogue': return <CatalogueCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
+      case 'toroi': return <ToRoiCalculator />;
+      case 'catalogue': return <CatalogueCalculator />;
       case 'vo': return <VoCalculator />;
-      case 'hopmem': return <HopMemCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} hopMemDatabase={hopMemDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} fetchPaperPrices={fetchPaperPrices} />;
+      case 'hopmem': return <HopMemCalculator />;
       case 'tuigiay': return <TuiGiayCalculator />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
-      default: return <ToRoiCalculator paperDatabase={paperDatabase} printerDatabase={printerDatabase} finishingDatabase={finishingDatabase} dinhMucDatabase={dinhMucDatabase} isLoadingPrices={isLoadingPrices} priceLoadError={priceLoadError} fetchPaperPrices={fetchPaperPrices} />;
+      default: return <ToRoiCalculator />;
     }
   };
 
@@ -92,6 +86,11 @@ export default function App() {
 
       <div className="flex-1 flex flex-col xl:h-screen xl:overflow-hidden overflow-y-auto">
         <div className="p-4 md:p-8 w-full flex flex-col flex-1 min-h-0">
+          {priceLoadError && (
+            <div className="mb-4 bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 rounded-xl text-sm">
+              {priceLoadError}
+            </div>
+          )}
           <div className="md:hidden mb-4 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm shrink-0">
             <label htmlFor="mobile-tab-select" className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2">
               Hệ thống tính giá
@@ -109,7 +108,11 @@ export default function App() {
           </div>
           
           <div className="flex-1 min-h-0">
-            {renderContent()}
+            <ErrorBoundary>
+              <Suspense fallback={<div className="bg-white border border-slate-200 rounded-2xl p-6 text-slate-500 text-sm">Đang tải module...</div>}>
+                {renderContent()}
+              </Suspense>
+            </ErrorBoundary>
           </div>
         </div>
 
@@ -119,5 +122,13 @@ export default function App() {
       </div>
 
     </div>
+  );
+}
+
+export default function App() {
+  return (
+    <PricingDataProvider>
+      <AppShell />
+    </PricingDataProvider>
   );
 }
