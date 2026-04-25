@@ -330,7 +330,7 @@ function HopMemCalculator({ paperDatabase, printerDatabase, finishingDatabase, h
       for (let i = 0; i < candidateRows.length; i++) {
         const row = candidateRows[i];
         const itemText = String(row.item || '').toLowerCase();
-        const condMatch = itemText.match(/([<>]=?)\s*([\d\.,]+)/);
+        const condMatch = itemText.match(/([<>]=?)\s*([\d.,]+)/);
 
         if (!condMatch) continue;
 

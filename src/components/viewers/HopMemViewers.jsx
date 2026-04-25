@@ -745,7 +745,7 @@ function BoxImpositionViewer({ boxType, width, depth, height, cols, rows, hopMem
 
   const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
 
-  const { outlinePath, creaseLines, minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
+  const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
   
   const singleW = maxX - minX;
   const singleH = maxY - minY;
