@@ -63,7 +63,7 @@ function readValidCache() {
     if (!parsed?.createdAt || !parsed?.payload) return null;
     if (Date.now() - parsed.createdAt > CACHE_TTL_MS) return null;
     return parsed.payload;
-  } catch (error) {
+  } catch {
     return null;
   }
 }

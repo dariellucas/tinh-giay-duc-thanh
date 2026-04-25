@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
 import { KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
@@ -421,7 +422,9 @@ function ToRoiCalculator({ paperDatabase, printerDatabase, finishingDatabase, di
     const copyToClipboard = () => {
       const textArea = document.createElement("textarea");
       textArea.value = generatedOrder; document.body.appendChild(textArea); textArea.select();
-      try { document.execCommand('copy'); setOrderCopied(true); setTimeout(() => setOrderCopied(false), 2000); } catch (err) {}
+      try { document.execCommand('copy'); setOrderCopied(true); setTimeout(() => setOrderCopied(false), 2000); } catch {
+        // Ignore clipboard fallback failures; users can still select the generated text manually.
+      }
       document.body.removeChild(textArea);
     };
     if (navigator.clipboard && navigator.clipboard.writeText) {
