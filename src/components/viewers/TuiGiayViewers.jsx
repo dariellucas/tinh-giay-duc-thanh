@@ -1,6 +1,7 @@
 import React from 'react';
 
-const PIECE_GAP = 0.4; // khe giữa 2 mảnh trên bình bản / bản vẽ
+const PIECE_GAP = 0.4;        // khe bế kỹ thuật (dùng trong khuôn / tính toán)
+const PIECE_GAP_VISUAL = 4.0; // khoảng tách trực quan trên flat "2 mảnh mặt khác nhau"
 
 function safeParse(val) {
   return parseFloat(String(val).replace(',', '.')) || 0;
@@ -70,18 +71,20 @@ function fmtDim(num) {
 
 /**
  * Pad / khoảng dimension theo tinh thần HopMem (bám thành phẩm + tham số nhỏ), không bám bbox rộng.
- * dimDetail: mép hình → đường kích thước chi tiết; dimGap: khoảng giữa chi tiết và tổng (hẹp hơn 2× dimDetail).
+ * dimDetail: mép hình → đường kích thước chi tiết; dimGap: khoảng giữa chi tiết và tổng.
  */
 function computeTuiGiayFlatDimMetrics(X, Y, Z, gapMiec, taiDan) {
   const pad = Math.max(X, Y, Z, gapMiec, taiDan) * 0.15;
-  const dimDetail = Math.min(pad * 1.5, 3.5);
-  const dimGap = Math.min(pad * 0.55, 2.0);
-  const tick = Math.min(Math.max(pad * 0.4, 0.12), dimDetail * 0.42, 1.6);
-  return { pad, dimDetail, dimGap, tick };
+  const dimDetail = Math.min(pad * 1.0, 2.6);
+  const dimGap = Math.min(pad * 0.85, 3.0);
+  const tick = Math.min(Math.max(pad * 0.22, 0.12), dimDetail * 0.32, 0.8);
+  const extGap = Math.min(Math.max(pad * 0.12, 0.12), 0.45);
+  const textGap = Math.max(tick * 0.65, 0.18);
+  return { pad, dimDetail, dimGap, tick, extGap, textGap };
 }
 
 /** Kích thước dọc (trái) + ngang (dưới) — cùng logic bố cục với HopMem FlatLayoutViewer */
-function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, dimDetail, dimGap, tick }) {
+function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, dimDetail, dimGap, tick, extGap, textGap }) {
   const theme = FLAT_THEME;
 
   const vBaseX = minX - dimDetail;
@@ -90,7 +93,7 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
   const hTotalY = hBaseY + dimGap;
 
   const strokeW = vbW * 0.002;
-  const dimFontSize = Math.max(vbW * 0.015, 0.5);
+  const dimFontSize = Math.max(vbW * 0.014, 0.5);
 
   return (
     <>
@@ -98,12 +101,12 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
         {vPoints.map((pt, i) => (
           <line
             key={`vExt-${i}`}
-            x1={minX}
+            x1={minX - extGap}
             y1={pt.y}
             x2={vBaseX - tick}
             y2={pt.y}
             stroke={theme.dimLine}
-            strokeWidth={strokeW * 0.5}
+            strokeWidth={strokeW * 0.35}
             strokeDasharray="4,4"
           />
         ))}
@@ -111,9 +114,9 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
         {vPoints.map((pt, i) => (
           <g key={`vTick-${i}`}>
             <line x1={vBaseX - tick} y1={pt.y} x2={vBaseX + tick} y2={pt.y} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
-            {i < vPoints.length - 1 && (
+            {i < vPoints.length - 1 && pt.val > 0 && (
               <text
-                x={vBaseX - tick * 1.5}
+                x={vBaseX - textGap}
                 y={(pt.y + vPoints[i + 1].y) / 2}
                 fill={theme.dimText}
                 stroke="none"
@@ -129,7 +132,7 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
         <line x1={vTotalX - tick} y1={minY} x2={vTotalX + tick} y2={minY} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
         <line x1={vTotalX - tick} y1={maxY} x2={vTotalX + tick} y2={maxY} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
         <text
-          x={vTotalX - tick * 1.5}
+          x={vTotalX - textGap}
           y={(minY + maxY) / 2}
           fill={theme.dimText}
           stroke="none"
@@ -145,11 +148,11 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
           <line
             key={`hExt-${i}`}
             x1={pt.x}
-            y1={maxY}
+            y1={maxY + extGap}
             x2={pt.x}
             y2={hBaseY + tick}
             stroke={theme.dimLine}
-            strokeWidth={strokeW * 0.5}
+            strokeWidth={strokeW * 0.35}
             strokeDasharray="4,4"
           />
         ))}
@@ -157,10 +160,10 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
         {hPoints.map((pt, i) => (
           <g key={`hTick-${i}`}>
             <line x1={pt.x} y1={hBaseY - tick} x2={pt.x} y2={hBaseY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
-            {i < hPoints.length - 1 && (
+            {i < hPoints.length - 1 && pt.val > 0 && (
               <text
                 x={(pt.x + hPoints[i + 1].x) / 2}
-                y={hBaseY - tick * 1.2}
+                y={hBaseY - textGap}
                 fill={theme.dimText}
                 stroke="none"
                 fontSize={dimFontSize}
@@ -176,7 +179,7 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
         <line x1={maxX} y1={hTotalY - tick} x2={maxX} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
         <text
           x={(minX + maxX) / 2}
-          y={hTotalY - tick * 1.2}
+          y={hTotalY - textGap}
           fill={theme.dimText}
           stroke="none"
           fontSize={dimFontSize}
@@ -266,8 +269,8 @@ function TuiGiayFlatLayoutViewer({
   const pieceW = taiDan + X + Y;
   const fullW = taiDan + 2 * X + 2 * Y;
   const theme = FLAT_THEME;
-  const { pad, dimDetail, dimGap, tick } = computeTuiGiayFlatDimMetrics(X, Y, Z, gapMiec, taiDan);
-  const dimOuter = dimDetail + dimGap + tick * 2.5;
+  const { pad, dimDetail, dimGap, tick, extGap, textGap } = computeTuiGiayFlatDimMetrics(X, Y, Z, gapMiec, taiDan);
+  const dimOuter = dimDetail + dimGap + tick * 2.2 + pad * 0.7;
 
   let caption = '';
   let minX = 0;
@@ -316,12 +319,12 @@ function TuiGiayFlatLayoutViewer({
       { x: maxX, val: 0 },
     ];
   } else {
-    caption = 'Túi 2 mảnh — Mặt khác nhau (cả 2 mảnh): mỗi mảnh Tai dán + Ngang + Hông';
+    caption = 'Túi 2 mảnh — Mặt khác nhau: 2 mảnh vẽ riêng (in từng mảnh); mỗi mảnh = Tai dán + Ngang + Hông';
     minX = 0;
     minY = 0;
-    maxX = 2 * pieceW + PIECE_GAP;
+    maxX = 2 * pieceW + PIECE_GAP_VISUAL;
     maxY = pieceH;
-    const x2 = pieceW + PIECE_GAP;
+    const x2 = pieceW + PIECE_GAP_VISUAL;
     vPoints = [
       { y: minY, val: gapMiec },
       { y: minY + gapMiec, val: Z },
@@ -332,17 +335,18 @@ function TuiGiayFlatLayoutViewer({
       { x: 0, val: taiDan },
       { x: taiDan, val: X },
       { x: taiDan + X, val: Y },
-      { x: x2, val: taiDan },
+      { x: pieceW, val: 0 },        // đóng mảnh 1 (không nhãn — khoảng tách trực quan)
+      { x: x2, val: taiDan },       // mở mảnh 2
       { x: x2 + taiDan, val: X },
       { x: x2 + taiDan + X, val: Y },
       { x: maxX, val: 0 },
     ];
   }
 
-  const vbX = minX - dimOuter * 2.5;
-  const vbY = minY - pad;
-  const vbW = maxX - vbX + pad;
-  const vbH = maxY + dimOuter * 2.5 - vbY + pad;
+  const vbX = minX - dimOuter;
+  const vbY = minY - pad * 0.45;
+  const vbW = maxX - vbX + pad * 0.5;
+  const vbH = maxY - vbY + dimOuter + pad * 0.35;
   const strokeW = vbW * 0.002;
 
   let body = null;
@@ -412,7 +416,7 @@ function TuiGiayFlatLayoutViewer({
       <g>
         <TuiGiayFlatPieceGroup x0={0} y0={0} pieceW={pieceW} pieceH={pieceH} taiDan={taiDan} X={X} Y={Y} Z={Z} gapMiec={gapMiec} strokeW={strokeW} faceLabel="Mặt 1" />
         <TuiGiayFlatPieceGroup
-          x0={pieceW + PIECE_GAP}
+          x0={pieceW + PIECE_GAP_VISUAL}
           y0={0}
           pieceW={pieceW}
           pieceH={pieceH}
@@ -443,6 +447,8 @@ function TuiGiayFlatLayoutViewer({
           dimDetail={dimDetail}
           dimGap={dimGap}
           tick={tick}
+          extGap={extGap}
+          textGap={textGap}
         />
         <g>{body}</g>
       </svg>
@@ -450,29 +456,35 @@ function TuiGiayFlatLayoutViewer({
   );
 }
 
-/** Một đơn vị bình bản (1 túi trên khuôn): path + crease trong hệ trục 0..singleW, 0..singleH */
+/**
+ * Geometry một đơn vị bình bản:
+ * - 1_manh: toàn bộ tờ trải (fullW × pieceH)
+ * - 2_manh: chỉ 1 mảnh đại diện (pieceW × pieceH) — cùng khuôn dùng cho cả 2 mảnh
+ */
 function buildBagUnitGeometry(X, Y, Z, taiDan, gapMiec, spec) {
-  const { mode, singleW, singleH, dayH, pieceW, pieceH, pieceGap } = spec;
+  const { mode, singleW, singleH, dayH, pieceW, pieceH } = spec;
   const lines = [];
   let outline = '';
+  let unitW, unitH;
 
   if (mode === '1_manh') {
-    outline = `M 0 0 L ${singleW} 0 L ${singleW} ${singleH} L 0 ${singleH} Z`;
+    unitW = singleW;
+    unitH = singleH;
+    outline = `M 0 0 L ${unitW} 0 L ${unitW} ${unitH} L 0 ${unitH} Z`;
     const vx = [taiDan, taiDan + X, taiDan + X + Y, taiDan + 2 * X + Y];
-    vx.forEach((x) => lines.push({ x1: x, y1: 0, x2: x, y2: singleH }));
-    lines.push({ x1: 0, y1: gapMiec, x2: singleW, y2: gapMiec });
-    lines.push({ x1: 0, y1: gapMiec + Z, x2: singleW, y2: gapMiec + Z });
+    vx.forEach((x) => lines.push({ x1: x, y1: 0, x2: x, y2: unitH }));
+    lines.push({ x1: 0, y1: gapMiec, x2: unitW, y2: gapMiec });
+    lines.push({ x1: 0, y1: gapMiec + Z, x2: unitW, y2: gapMiec + Z });
   } else {
-    outline = `M 0 0 L ${singleW} 0 L ${singleW} ${singleH} L 0 ${singleH} Z`;
-    const addPiece = (xOff) => {
-      creasesVerticalPiece(xOff, 0, pieceH, taiDan, X).forEach((l) => lines.push(l));
-      creasesHorizontal(0, xOff, pieceW, gapMiec, Z).forEach((l) => lines.push(l));
-    };
-    addPiece(0);
-    addPiece(pieceW + pieceGap);
+    // 2_manh: minh họa 1 mảnh đại diện — một khuôn dùng chung cho cả hai mảnh
+    unitW = pieceW;
+    unitH = pieceH;
+    outline = `M 0 0 L ${unitW} 0 L ${unitW} ${unitH} L 0 ${unitH} Z`;
+    creasesVerticalPiece(0, 0, pieceH, taiDan, X).forEach((l) => lines.push(l));
+    creasesHorizontal(0, 0, pieceW, gapMiec, Z).forEach((l) => lines.push(l));
   }
 
-  return { outlinePath: outline, creaseLines: lines, minX: 0, maxX: singleW, minY: 0, maxY: singleH, dayH };
+  return { outlinePath: outline, creaseLines: lines, minX: 0, maxX: unitW, minY: 0, maxY: unitH, dayH, unitW, unitH };
 }
 
 function TuiGiayImpositionViewer({
@@ -500,18 +512,19 @@ function TuiGiayImpositionViewer({
   if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return null;
 
   const spec = computeTuiGiayKhuonUnit(X, Y, Z, taiDan, gapMiec, soManh);
-  const { singleW, singleH } = spec;
   const geom = buildBagUnitGeometry(X, Y, Z, taiDan, gapMiec, spec);
-  const { outlinePath, creaseLines } = geom;
+  const { outlinePath, creaseLines, unitW, unitH } = geom;
+
+  // 2_manh: displayW = pieceW (1 mảnh đại diện); 1_manh: displayW = singleW (tờ đầy)
+  const displayW = unitW;
+  const displayH = unitH;
 
   const gap = muonSong ? 0 : 0.4;
-  const overlapX = 0;
-  const overlapY = 0;
-  const stepW = singleW - overlapX + gap;
-  const stepH = singleH - overlapY + gap;
+  const stepW = displayW + gap;
+  const stepH = displayH + gap;
 
-  const totalW = singleW + (cCols - 1) * stepW;
-  const totalH = singleH + (cRows - 1) * stepH;
+  const totalW = displayW + (cCols - 1) * stepW;
+  const totalH = displayH + (cRows - 1) * stepH;
 
   let pW = parentW || 0;
   let pH = parentH || 0;
@@ -564,7 +577,7 @@ function TuiGiayImpositionViewer({
       <p className="text-[11px] text-slate-500 mb-2 text-center">
         {spec.mode === '1_manh'
           ? '1 bát = 1 túi (1 mảnh trên khuôn)'
-          : '1 bát = 1 túi (2 mảnh cạnh nhau trên khuôn)'}
+          : '1 khuôn dùng chung cho cả 2 mảnh — vẽ 1 mảnh đại diện (tiền giấy tính × 2 mảnh/túi)'}
       </p>
       <svg viewBox={`${vbX} ${vbY} ${vbW} ${vbH}`} className="w-full h-auto max-h-[600px] drop-shadow-sm">
         {pW > 0 && pH > 0 && (
@@ -666,11 +679,11 @@ function TuiGiayImpositionViewer({
                 ))}
                 <path d={outlinePath} fill="none" stroke={theme.stroke} strokeWidth={strokeW} strokeLinejoin="round" />
                 <text
-                  x={singleW / 2}
-                  y={singleH / 2}
+                  x={displayW / 2}
+                  y={displayH / 2}
                   fill="#3b82f6"
                   opacity="0.14"
-                  fontSize={Math.min(singleW, singleH) * 0.35}
+                  fontSize={Math.min(displayW, displayH) * 0.35}
                   fontWeight="bold"
                   textAnchor="middle"
                   dominantBaseline="middle"

@@ -4,7 +4,6 @@ import { LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants
 import { Box3DViewer } from '../components/viewers/HopMemViewers';
 import { computeTuiGiayKhuonUnit, TuiGiayFlatLayoutViewer, TuiGiayImpositionViewer } from '../components/viewers/TuiGiayViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
-import { useDebounce } from '../hooks/useDebounce';
 import { findFinishingByName } from '../utils/finishingUtils';
 import { safeParseNumber } from '../utils/numberUtils';
 
@@ -20,9 +19,9 @@ function TuiGiayCalculator() {
   // --- STATES THÔNG TIN CHUNG ---
   const [productName, setProductName] = useState('Túi giấy');
   const [quantity, setQuantity] = useState('1000');
-  const [boxWidth, setBoxWidth] = useState('13'); // Ngang
-  const [boxDepth, setBoxDepth] = useState('8'); // Hông
-  const [boxHeight, setBoxHeight] = useState('8'); // Cao
+  const [boxWidth, setBoxWidth] = useState('20'); // Ngang
+  const [boxDepth, setBoxDepth] = useState('10'); // Hông
+  const [boxHeight, setBoxHeight] = useState('30'); // Cao
   const [gapMiec, setGapMiec] = useState('4');
   const [taiDanStr, setTaiDanStr] = useState('2');
   const [matTui, setMatTui] = useState('giong_nhau');
@@ -38,11 +37,9 @@ function TuiGiayCalculator() {
   const [rollWidth, setRollWidth] = useState('');
   const [rollSplit, setRollSplit] = useState(1);
   const [rollCutLength, setRollCutLength] = useState('');
-  const [cols, setCols] = useState(1); // Số bát X
-  const [rows, setRows] = useState(1); // Số bát Y
-  const [muonSong, setMuonSong] = useState(false);
+  const cols = 1; // Cố định 1 bát/tờ (túi giấy kích thước lớn, không xếp nhiều bát)
+  const rows = 1;
   const [muonNhip, setMuonNhip] = useState(false);
-  const [allowMixed, setAllowMixed] = useState(false);
 
   // --- STATES IN ẤN ---
   const [printColors, setPrintColors] = useState(4);
@@ -98,104 +95,23 @@ function TuiGiayCalculator() {
     else setGapMiec('4');
   }, [paperType]);
 
-  const debouncedAutoFitInputs = useDebounce(
-    [boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, gapMiec, taiDanStr, soManh],
-    300,
-  );
+  // Nhíp (gripper) offset = 1 cm; vùng in an toàn margin = 0.3 cm mỗi cạnh
+  const GRIPPER_CM = 1.0;
+  const SAFE_MARGIN_CM = 0.3;
 
+  // Kích thước cụm khuôn = kích thước 1 bát (khuôn bế 1 mảnh)
+  // 1_manh: fullW × pieceH  |  2_manh: pieceW × pieceH (dùng chung khuôn cho 2 mảnh)
   const cumKhuonSize = useMemo(() => {
     const X = safeParseNumber(boxWidth);
     const Y = safeParseNumber(boxDepth);
     const Z = safeParseNumber(boxHeight);
-    const cCols = parseInt(cols) || 1;
-    const cRows = parseInt(rows) || 1;
-
-    if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return { w: 0, h: 0 };
-
+    if (X <= 0 || Y <= 0 || Z <= 0) return { w: 0, h: 0 };
     const spec = computeTuiGiayKhuonUnit(X, Y, Z, safeParseNumber(taiDanStr), safeParseNumber(gapMiec), soManh);
-    const { singleW, singleH } = spec;
-    const gap = muonSong ? 0 : 0.4;
-    const stepW = singleW + gap;
-    const stepH = singleH + gap;
+    const w = spec.mode === '2_manh' ? spec.pieceW : spec.singleW;
+    const h = spec.pieceH;
+    return { w, h };
+  }, [boxWidth, boxDepth, boxHeight, gapMiec, taiDanStr, soManh]);
 
-    const totalW = singleW + (cCols - 1) * stepW;
-    const totalH = singleH + (cRows - 1) * stepH;
-
-    return { w: totalW, h: totalH };
-  }, [boxWidth, boxDepth, boxHeight, cols, rows, muonSong, gapMiec, taiDanStr, soManh]);
-
-  // --- THÊM MỚI: TỰ ĐỘNG TÍNH TOÁN SỐ BÁT IN KHI THAY ĐỔI KÍCH THƯỚC HOẶC KHỔ GIẤY ---
-  useEffect(() => {
-    const [dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dGapMiec, dTaiDanStr, dSoManh] = debouncedAutoFitInputs;
-    const X = safeParseNumber(dBoxWidth);
-    const Y = safeParseNumber(dBoxDepth);
-    const Z = safeParseNumber(dBoxHeight);
-    
-    // Nếu chưa nhập đủ kích thước hoặc chưa chọn khổ giấy thì bỏ qua
-    if (X <= 0 || Y <= 0 || Z <= 0 || dParentSizeIdx === '') return;
-
-    // Lấy chính xác kích thước khổ giấy in
-    let Pw = 0, Ph = 0;
-    if (dParentSizeIdx === PARENT_PAPER_SIZES.length) {
-      Pw = safeParseNumber(dCustomParentW);
-      Ph = safeParseNumber(dCustomParentH);
-    } else if (dParentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      Pw = safeParseNumber(dRollWidth) / dRollSplit;
-      Ph = safeParseNumber(dRollCutLength);
-    } else {
-      Pw = PARENT_PAPER_SIZES[dParentSizeIdx]?.w || 0;
-      Ph = PARENT_PAPER_SIZES[dParentSizeIdx]?.h || 0;
-    }
-    if (Pw <= 0 || Ph <= 0) return;
-
-    const spec = computeTuiGiayKhuonUnit(X, Y, Z, safeParseNumber(dTaiDanStr), safeParseNumber(dGapMiec), dSoManh);
-    const { singleW, singleH } = spec;
-    const gap = dMuonSong ? 0 : 0.4;
-    const stepW = singleW + gap;
-    const stepH = singleH + gap;
-
-    const getMaxRows = (maxH) => {
-      if (singleH > maxH) return 0;
-      let r = 1;
-      let usedH = singleH;
-      while (usedH + gap + singleH <= maxH) {
-        usedH += gap + singleH;
-        r++;
-      }
-      return r;
-    };
-
-    const getMaxCols = (maxW) => {
-      if (singleW > maxW) return 0;
-      let c = 1;
-      let usedW = singleW;
-      while (usedW + gap + singleW <= maxW) {
-        usedW += gap + singleW;
-        c++;
-      }
-      return c;
-    };
-
-    const tryFit = (paperW, paperH) => {
-      const r = getMaxRows(paperH);
-      if (r === 0) return { c: 0, r: 0, total: 0 };
-      const c = getMaxCols(paperW);
-      return { c, r, total: c * r };
-    };
-
-    // Thử tính trên cả 2 chiều xoay của khổ giấy
-    const opt1 = tryFit(Pw, Ph);
-    const opt2 = tryFit(Ph, Pw);
-
-    let bestOpt = opt1.total >= opt2.total ? opt1 : opt2;
-
-    // Tự động cập nhật state nếu tìm được phương án xếp phù hợp
-    if (bestOpt.total > 0) {
-      setCols(prev => (prev !== bestOpt.c ? bestOpt.c : prev));
-      setRows(prev => (prev !== bestOpt.r ? bestOpt.r : prev));
-    }
-  }, [debouncedAutoFitInputs]);
-  // --- KẾT THÚC THÊM MỚI ---
 
   // Ghi nhận khổ giấy in hiện tại (dùng để truyền xuống preview bản vẽ thời gian thực)
   const currentPaperSize = useMemo(() => {
@@ -212,6 +128,60 @@ function TuiGiayCalculator() {
     }
     return { w: Pw, h: Ph };
   }, [parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength]);
+
+  // Helper: parse kích thước máy in từ tên (vd. "65x86" → { maxW:86, maxH:65 })
+  const parsePrinterMaxSize = (name = '') => {
+    const m = String(name).match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+    if (!m) return null;
+    const a = parseFloat(m[1]), b = parseFloat(m[2]);
+    return { maxW: Math.max(a, b), maxH: Math.min(a, b) };
+  };
+
+  // Khổ giấy hợp lệ = vùng in an toàn chứa được cụm khuôn (sau nhíp + margin)
+  const validPaperSizeSet = useMemo(() => {
+    const valid = new Set();
+    if (cumKhuonSize.w <= 0 || cumKhuonSize.h <= 0) {
+      PARENT_PAPER_SIZES.forEach((_, idx) => valid.add(idx));
+      return valid;
+    }
+    const reqMax = Math.max(cumKhuonSize.w, cumKhuonSize.h);
+    const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
+    PARENT_PAPER_SIZES.forEach((size, idx) => {
+      const pMax = Math.max(size.w, size.h);
+      const pMin = Math.min(size.w, size.h);
+      const safeMax = pMax - SAFE_MARGIN_CM * 2;
+      const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
+      if (reqMax <= safeMax && reqMin <= safeMin) valid.add(idx);
+    });
+    return valid;
+  }, [cumKhuonSize, muonNhip]);
+
+  // Reset khổ giấy nếu loại đang chọn không còn hợp lệ (chỉ với khổ chuẩn)
+  useEffect(() => {
+    if (typeof parentSizeIdx === 'number' && parentSizeIdx < PARENT_PAPER_SIZES.length) {
+      if (!validPaperSizeSet.has(parentSizeIdx)) setParentSizeIdx('');
+    }
+  }, [validPaperSizeSet, parentSizeIdx]);
+
+  // Máy in hợp lệ = max paper ≥ khổ giấy đang chọn
+  const validPrinters = useMemo(() => {
+    if (!printerDatabase || printerDatabase.length === 0) return [];
+    const { w: pW, h: pH } = currentPaperSize;
+    if (pW <= 0 || pH <= 0) return printerDatabase;
+    const pMax = Math.max(pW, pH), pMin = Math.min(pW, pH);
+    return printerDatabase.filter(p => {
+      const sz = parsePrinterMaxSize(p.name);
+      if (!sz) return true; // không parse được → giữ lại
+      return sz.maxW >= pMax && sz.maxH >= pMin;
+    });
+  }, [printerDatabase, currentPaperSize]);
+
+  // Reset máy in nếu không còn hợp lệ với khổ giấy mới
+  useEffect(() => {
+    if (selectedPrinter && validPrinters.length > 0) {
+      if (!validPrinters.find(p => p.id === selectedPrinter)) setSelectedPrinter('');
+    }
+  }, [validPrinters, selectedPrinter]);
 
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
   const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
@@ -248,9 +218,15 @@ function TuiGiayCalculator() {
     const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
     const pMax = Math.max(Pw, Ph);
     const pMin = Math.min(Pw, Ph);
+    // Vùng in an toàn: trừ margin 2 cạnh + nhíp (trừ khi mượn nhíp)
+    const safeMax = pMax - SAFE_MARGIN_CM * 2;
+    const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
 
-    if (reqMax > pMax || reqMin > pMin) {
-      setError(`Kích thước cụm khuôn (${reqMax.toFixed(1)} x ${reqMin.toFixed(1)} cm) lớn hơn khổ giấy in (${pMax} x ${pMin} cm). Vui lòng điều chỉnh.`);
+    if (reqMax > safeMax || reqMin > safeMin) {
+      const why = reqMax > safeMax
+        ? `chiều dài khuôn (${reqMax.toFixed(1)} cm) vượt chiều dài an toàn tờ (${safeMax.toFixed(1)} cm)`
+        : `chiều rộng khuôn (${reqMin.toFixed(1)} cm) vượt chiều rộng an toàn tờ (${safeMin.toFixed(1)} cm${!muonNhip ? ', đã trừ nhíp 1 cm' : ''})`;
+      setError(`Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn hoặc bật Mượn nhíp.`);
       setResult(null);
       setIsCalculated(false);
       return;
@@ -258,8 +234,10 @@ function TuiGiayCalculator() {
 
     setError('');
 
-    const itemsPerSheet = cols * rows;
-    const soToInLyThuyet = Math.ceil(qty / itemsPerSheet);
+    const itemsPerSheet = 1; // 1 bát/tờ cố định
+    // 2_manh: mỗi túi cần 2 tờ in (mỗi tờ 1 mảnh); 1_manh: 1 tờ/túi
+    const piecesPerBag = soManh === '2_manh' ? 2 : 1;
+    const soToInLyThuyet = Math.ceil(qty * piecesPerBag / itemsPerSheet);
     let dynamicSpoilage = 100; // Giá trị mặc định
     if (dinhMucDatabase && dinhMucDatabase.length > 0) {
       const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
@@ -408,7 +386,7 @@ function TuiGiayCalculator() {
     const donGiaSP = giaBan / qty;
 
     setResult({
-      itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
+      itemsPerSheet, piecesPerBag, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
       matTui, soManh, quai,
       costs: {
@@ -529,17 +507,6 @@ function TuiGiayCalculator() {
           </div>
 
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát X</label>
-              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát Y</label>
-              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
-            </div>
-          </div>
-
           <div className="space-y-1 pt-2">
             <label className="text-xs font-bold text-orange-800">Số đo cụm khuôn (cm)</label>
             <div className="w-full p-2.5 bg-orange-100 border border-orange-200 rounded-lg text-sm font-bold text-orange-900 text-center shadow-inner">
@@ -563,7 +530,11 @@ function TuiGiayCalculator() {
             </label>
             <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
-              {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
+              {PARENT_PAPER_SIZES.map((size, idx) => (
+                validPaperSizeSet.has(idx)
+                  ? <option key={idx} value={idx}>{size.label}</option>
+                  : null
+              ))}
               <option value={PARENT_PAPER_SIZES.length}>Tùy chọn...</option>
               <option value={PARENT_PAPER_SIZES.length + 1}>Xả lô (Từ cuộn)...</option>
             </select>
@@ -602,16 +573,8 @@ function TuiGiayCalculator() {
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonSong} onChange={(e) => setMuonSong(e.target.checked)} />
-              <span className="text-sm font-medium text-slate-700">Mượn sông</span>
-            </label>
-            <label className="flex items-center space-x-1.5 cursor-pointer group">
               <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => setMuonNhip(e.target.checked)} />
               <span className="text-sm font-medium text-slate-700">Mượn nhíp</span>
-            </label>
-            <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={allowMixed} onChange={(e) => setAllowMixed(e.target.checked)} />
-              <span className="text-sm font-medium text-slate-700">Xếp phối hợp (L)</span>
             </label>
           </div>
         </div>
@@ -630,7 +593,7 @@ function TuiGiayCalculator() {
               <label className="text-xs font-medium text-slate-600">Chọn máy in</label>
               <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={selectedPrinter} onChange={(e) => setSelectedPrinter(e.target.value)}>
                 <option value="">Chọn máy...</option>
-                {printerDatabase.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {validPrinters.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
@@ -750,7 +713,7 @@ function TuiGiayCalculator() {
               />
               
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
-                <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
+                <span>Sơ đồ bình bản khuôn bế (1 bát / tờ)</span>
                 <button
                   onClick={() => setIsZoomModalOpen(true)}
                   className="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 p-1.5 px-3 rounded-lg transition-colors flex items-center gap-1 text-sm font-medium"
@@ -768,7 +731,7 @@ function TuiGiayCalculator() {
                 soManh={soManh}
                 cols={cols}
                 rows={rows}
-                muonSong={muonSong}
+                muonSong={false}
                 muonNhip={muonNhip}
                 parentW={currentPaperSize.w}
                 parentH={currentPaperSize.h}
@@ -779,9 +742,9 @@ function TuiGiayCalculator() {
               <>
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-                  <span className="text-slate-500 text-sm font-medium mb-1">Số bát (SP/Tờ)</span>
-                  <span className="text-3xl font-bold text-blue-600">{result.itemsPerSheet}</span>
-                  <span className="text-xs text-slate-400 mt-1">{cols} cột × {rows} hàng</span>
+                  <span className="text-slate-500 text-sm font-medium mb-1">Số tờ / túi</span>
+                  <span className="text-3xl font-bold text-blue-600">{result.piecesPerBag}</span>
+                  <span className="text-xs text-slate-400 mt-1">{result.piecesPerBag === 2 ? '2 mảnh — 2 tờ in' : '1 mảnh — 1 tờ in'}</span>
                 </div>
                 
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
@@ -923,7 +886,7 @@ function TuiGiayCalculator() {
                         soManh={soManh}
                         cols={cols}
                         rows={rows}
-                        muonSong={muonSong}
+                        muonSong={false}
                         muonNhip={muonNhip}
                         parentW={currentPaperSize.w}
                         parentH={currentPaperSize.h}
