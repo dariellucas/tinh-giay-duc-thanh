@@ -66,6 +66,13 @@ export const DEFAULT_FINISHING_DATA = [
   { item: 'Túi 2 mảnh có cạnh <=14', price: 1900, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
   { item: 'Túi 2 mảnh có cạnh <=17', price: 2000, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
   { item: 'Túi 2 mảnh có cạnh >17', price: 2100, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  // Khuôn bế túi (Sheet GiaCong — phân loại thể tích X×Y×Z)
+  { item: 'Khuôn bế túi 1 mảnh nhỏ', price: 220000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
+  { item: 'Khuôn bế túi 1 mảnh trung bình', price: 250000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
+  { item: 'Khuôn bế túi 1 mảnh to', price: 350000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
+  { item: 'Khuôn bế túi 2 mảnh nhỏ', price: 180000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
+  { item: 'Khuôn bế túi 2 mảnh trung bình', price: 210000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
+  { item: 'Khuôn bế túi 2 mảnh to', price: 290000, unit: 'VNĐ / 1 chiếc', minPrice: 0 },
 ];
 
 export const DEFAULT_DINHMUC_DATA = [

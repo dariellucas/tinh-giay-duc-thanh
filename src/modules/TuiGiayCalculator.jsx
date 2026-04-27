@@ -46,9 +46,39 @@ function findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm) {
 
 /**
  * Đơn giá gia công túi (VNĐ/chiếc): đơn giá + tối thiểu đơn hàng lấy từ Sheet GiaCong (`finishing`);
- * +500 nếu Kraft trắng 100/120; +500 nếu quai Dây dù đẹp / Dây lụa (đồng bộ AppSheet).
+/**
+ * Phân loại thể tích túi theo công thức AppSheet:
+ * ≤3900 → "nhỏ"; ≤6820 → "trung bình"; >6820 → "to"
  */
-function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, paperGsm, quai, finishingDatabase }) {
+function classifyTuiVolume(x, y, z) {
+  const vol = safeParseNumber(String(x)) * safeParseNumber(String(y)) * safeParseNumber(String(z));
+  if (vol <= 3900) return { size: 'nhỏ', vol };
+  if (vol <= 6820) return { size: 'trung bình', vol };
+  return { size: 'to', vol };
+}
+
+/**
+ * Tra `finishingDatabase` (Sheet GiaCong) để lấy giá khuôn bế túi.
+ * Hạng mục dạng: "Khuôn bế túi 1/2 mảnh nhỏ/trung bình/to"
+ */
+function findTuiGiayKhuonBeRow(finishingDatabase, soManh, sizeLabel) {
+  const pieceText = soManh === '1_manh' ? '1 mảnh' : '2 mảnh';
+  const rows = finishingDatabase || [];
+  return rows.find((r) => {
+    const it = String(r.item || '').toLowerCase();
+    return (
+      it.includes('khuôn bế') &&
+      it.includes('túi') &&
+      it.includes(pieceText.toLowerCase()) &&
+      it.includes(sizeLabel.toLowerCase())
+    );
+  }) || null;
+}
+
+/**
+ * +500 nếu loại giấy Kraft (bất kỳ định lượng); +500 nếu quai Dây dù đẹp / Dây lụa.
+ */
+function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, quai, finishingDatabase }) {
   const y = safeParseNumber(String(hongYcm));
   const matched = findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm);
   const base = matched ? safeParseNumber(matched.row.price) : 0;
@@ -59,11 +89,10 @@ function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, paperGsm, quai,
     ? `GiaCong: «${String(matched.row.item || '').trim()}» (${matched.bandHint})`
     : 'Không tìm thấy dòng GiaCong túi (cần hạng mục dạng «Túi 1/2 mảnh có cạnh ≤…/ >…» trên Sheet GiaCong)';
 
-  const gsm = Number(paperGsm);
-  const kraftTrang100120 = paperType === 'Kraft trắng' && (gsm === 100 || gsm === 120);
+  const isKraftPaper = typeof paperType === 'string' && paperType.trim().toLowerCase().startsWith('kraft');
   const quaiPremium = quai === 'day_du_dep' || quai === 'day_lua';
   let surcharges = 0;
-  if (kraftTrang100120) surcharges += 500;
+  if (isKraftPaper) surcharges += 500;
   if (quaiPremium) surcharges += 500;
   const donGia = base + surcharges;
 
@@ -73,7 +102,7 @@ function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, paperGsm, quai,
     donGia,
     minOrder,
     tierLabel,
-    kraftTrang100120,
+    isKraftPaper,
     quaiPremium,
     sheetRowMatched: Boolean(matched),
   };
@@ -129,7 +158,7 @@ function TuiGiayCalculator() {
   const [embossWidth, setEmbossWidth] = useState('');
 
   // --- STATES TÀI CHÍNH ---
-  const [dieCost, setDieCost] = useState(0);
+
   const [shippingCost, setShippingCost] = useState(0);
   const [markup, setMarkup] = useState(1.1);
 
@@ -387,7 +416,6 @@ function TuiGiayCalculator() {
       soManh,
       hongYcm: boxDepth,
       paperType,
-      paperGsm,
       quai,
       finishingDatabase,
     });
@@ -396,15 +424,20 @@ function TuiGiayCalculator() {
     const tienGiaCong = Math.max(tienGiaCongTinhTheoSL, giaCongUnit.minOrder);
     const isMinGiaCongApplied = tienGiaCongTinhTheoSL < giaCongUnit.minOrder;
     const phuPhiBits = [];
-    if (giaCongUnit.kraftTrang100120) phuPhiBits.push('+500đ Kraft trắng 100/120');
+    if (giaCongUnit.isKraftPaper) phuPhiBits.push('+500đ giấy Kraft');
     if (giaCongUnit.quaiPremium) phuPhiBits.push('+500đ quai (Dây đẹp/Lụa)');
     const phuPhiText = phuPhiBits.length ? `; ${phuPhiBits.join('; ')}` : '';
     const giaCongDetail = isMinGiaCongApplied
       ? `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText}; áp tối thiểu đơn hàng ${giaCongUnit.minOrder.toLocaleString('vi-VN')}đ)`
       : `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText})`;
 
-    // 5. Tiền khuôn bế
-    const tienKhuonBe = parseFloat(dieCost) || 0;
+    // 5. Tiền khuôn bế (tra Sheet GiaCong theo thể tích X×Y×Z + số mảnh)
+    const { size: khuonSizeLabel, vol: khuonVol } = classifyTuiVolume(boxWidth, boxDepth, boxHeight);
+    const khuonBeRow = findTuiGiayKhuonBeRow(finishingDatabase, soManh, khuonSizeLabel);
+    const tienKhuonBe = khuonBeRow ? safeParseNumber(khuonBeRow.price) : 0;
+    const khuonBeDetail = khuonBeRow
+      ? `(${khuonBeRow.item}; V=${Math.round(khuonVol).toLocaleString('vi-VN')} cm³ → ${khuonSizeLabel})`
+      : `(Không tìm thấy dòng khuôn bế túi trên Sheet GiaCong; V=${Math.round(khuonVol).toLocaleString('vi-VN')} cm³ → ${khuonSizeLabel})`;
 
     // 6. Tiền vận chuyển
     const tienVanChuyen = parseFloat(shippingCost) || 0; 
@@ -420,7 +453,7 @@ function TuiGiayCalculator() {
       costs: {
         tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
-        soKem, giaKem, quaLuotMoiKem, giaLuot, sooBaiIn, canDetail, giaCongDetail
+        soKem, giaKem, quaLuotMoiKem, giaLuot, sooBaiIn, canDetail, giaCongDetail, khuonBeDetail
       }
     });
 
@@ -687,7 +720,7 @@ function TuiGiayCalculator() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Tiền khuôn bế (VNĐ)</label>
-              <input type="number" className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm text-right font-medium" value={dieCost} onChange={(e) => setDieCost(Number(e.target.value))} />
+              <span className="text-sm text-slate-500 italic">Tự động tra bảng GiaCong</span>
             </div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Vận chuyển (VNĐ)</label>
@@ -868,6 +901,7 @@ function TuiGiayCalculator() {
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
                         <span>7. Tiền khuôn bế:</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.khuonBeDetail}</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKhuonBe).toLocaleString('vi-VN')} đ</span>
                     </div>
