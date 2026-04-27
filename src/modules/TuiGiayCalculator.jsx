@@ -7,6 +7,78 @@ import { usePricingDataContext } from '../context/PricingDataContext';
 import { findFinishingByName } from '../utils/finishingUtils';
 import { safeParseNumber } from '../utils/numberUtils';
 
+/** Fallback nếu dòng Sheet GiaCong không có minPrice */
+const GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND = 300_000;
+
+/**
+ * Tra `finishingDatabase` (Sheet GiaCong → API `finishing`): hạng mục dạng
+ * "Túi 1 mảnh có cạnh <=10" … (Hông Y trong app = "cạnh" trên sheet).
+ */
+function findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm) {
+  const y = safeParseNumber(String(hongYcm));
+  const rows = finishingDatabase || [];
+  const pieceRe = soManh === '1_manh' ? /\b1\s*mảnh\b/i : /\b2\s*mảnh\b/i;
+  const bagRows = rows.filter((r) => {
+    const it = String(r.item || '');
+    return pieceRe.test(it) && (/túi/i.test(it) || /cạnh/i.test(it));
+  });
+
+  const itLower = (r) => String(r.item || '').toLowerCase();
+  let bandTest;
+  let bandHint;
+  if (y <= 10) {
+    bandTest = (it) => /<=\s*10\b|≤\s*10\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 10';
+  } else if (y <= 14) {
+    bandTest = (it) => /<=\s*14\b|≤\s*14\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 14';
+  } else if (y <= 17) {
+    bandTest = (it) => /<=\s*17\b|≤\s*17\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 17';
+  } else {
+    bandTest = (it) => />\s*17\b|≥\s*17\b|>=\s*17\b/.test(it);
+    bandHint = 'Hông (Y) > 17';
+  }
+
+  const row = bagRows.find((r) => bandTest(itLower(r)));
+  return row ? { row, bandHint } : null;
+}
+
+/**
+ * Đơn giá gia công túi (VNĐ/chiếc): đơn giá + tối thiểu đơn hàng lấy từ Sheet GiaCong (`finishing`);
+ * +500 nếu Kraft trắng 100/120; +500 nếu quai Dây dù đẹp / Dây lụa (đồng bộ AppSheet).
+ */
+function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, paperGsm, quai, finishingDatabase }) {
+  const y = safeParseNumber(String(hongYcm));
+  const matched = findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm);
+  const base = matched ? safeParseNumber(matched.row.price) : 0;
+  const minOrder = matched
+    ? (safeParseNumber(matched.row.minPrice) || GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND)
+    : GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND;
+  const tierLabel = matched
+    ? `GiaCong: «${String(matched.row.item || '').trim()}» (${matched.bandHint})`
+    : 'Không tìm thấy dòng GiaCong túi (cần hạng mục dạng «Túi 1/2 mảnh có cạnh ≤…/ >…» trên Sheet GiaCong)';
+
+  const gsm = Number(paperGsm);
+  const kraftTrang100120 = paperType === 'Kraft trắng' && (gsm === 100 || gsm === 120);
+  const quaiPremium = quai === 'day_du_dep' || quai === 'day_lua';
+  let surcharges = 0;
+  if (kraftTrang100120) surcharges += 500;
+  if (quaiPremium) surcharges += 500;
+  const donGia = base + surcharges;
+
+  return {
+    baseDonGia: base,
+    surcharges,
+    donGia,
+    minOrder,
+    tierLabel,
+    kraftTrang100120,
+    quaiPremium,
+    sheetRowMatched: Boolean(matched),
+  };
+}
+
 function TuiGiayCalculator() {
   const {
     paperDatabase,
@@ -237,8 +309,16 @@ function TuiGiayCalculator() {
     const itemsPerSheet = 1; // 1 bát/tờ cố định
     // 2_manh: mỗi túi cần 2 tờ in (mỗi tờ 1 mảnh); 1_manh: 1 tờ/túi
     const piecesPerBag = soManh === '2_manh' ? 2 : 1;
-    const soToInLyThuyet = Math.ceil(qty * piecesPerBag / itemsPerSheet);
-    let dynamicSpoilage = 100; // Giá trị mặc định
+    // Số tờ lý thuyết cho 1 bài in (1 mảnh hoặc toàn túi 1 mảnh)
+    const soToInMotBai = Math.ceil(qty / itemsPerSheet);
+    // Số tờ lý thuyết tổng cộng (nhân piecesPerBag vì mỗi bài in = 1 mảnh)
+    const soToInLyThuyet = soToInMotBai * piecesPerBag;
+
+    // Bù hao tra theo số tờ MỘT bài in (soToInMotBai), rồi nhân số bài in
+    // 2_manh + khac_nhau: 2 bài in độc lập → bù hao × 2 (mỗi bài có bù hao riêng)
+    // 2_manh + giong_nhau: cùng bản in → bù hao × 1 (bù hao đã được nhân qua soToInLyThuyet)
+    const sooBaiIn = (soManh === '2_manh' && matTui === 'khac_nhau') ? 2 : 1;
+    let buHaoMotBai = 100; // Giá trị mặc định
     if (dinhMucDatabase && dinhMucDatabase.length > 0) {
       const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
       for (let i = 0; i < printSpoilageRules.length; i++) {
@@ -246,13 +326,13 @@ function TuiGiayCalculator() {
         const fromQ = parseInt(rule.fromQty) || 0;
         const toQ = parseInt(rule.toQty) || 0;
         const spoilVal = parseInt(rule.spoilage) || 0;
-
-        if (soToInLyThuyet >= fromQ && soToInLyThuyet <= toQ) {
-          dynamicSpoilage = spoilVal;
+        if (soToInMotBai >= fromQ && soToInMotBai <= toQ) {
+          buHaoMotBai = spoilVal;
           break;
         }
       }
     }
+    const dynamicSpoilage = buHaoMotBai * sooBaiIn;
     const parentSheetsNeeded = soToInLyThuyet + dynamicSpoilage;
 
     // 1. Tiền giấy
@@ -270,79 +350,19 @@ function TuiGiayCalculator() {
       tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
     }
 
-    const getGiaCongRule = () => {
-      const keyword = 'hộp mềm số lượng';
-      const candidateRows = (finishingDatabase || []).filter((row) => {
-        const item = String(row?.item || '').toLowerCase();
-        return item.includes(keyword);
-      });
-
-      const normalizedOperator = (rawOperator) => {
-        const op = String(rawOperator || '').trim();
-        if (op === '≤') return '<=';
-        if (op === '≥') return '>=';
-        return op;
-      };
-
-      const parsedRules = [];
-
-      for (let i = 0; i < candidateRows.length; i++) {
-        const row = candidateRows[i];
-        const itemText = String(row.item || '').toLowerCase();
-        const condMatch = itemText.match(/([<>]=?|[≤≥])\s*([\d\.,]+)/);
-
-        if (!condMatch) continue;
-
-        const operator = normalizedOperator(condMatch[1]);
-        const threshold = safeParseNumber(condMatch[2]);
-        let isMatch = false;
-
-        if (operator === '<' && qty < threshold) isMatch = true;
-        if (operator === '<=' && qty <= threshold) isMatch = true;
-        if (operator === '>' && qty > threshold) isMatch = true;
-        if (operator === '>=' && qty >= threshold) isMatch = true;
-
-        parsedRules.push({
-          operator,
-          threshold,
-          row,
-        });
-
-        if (isMatch) {
-          return {
-            donGia: safeParseNumber(row.price),
-            minPrice: safeParseNumber(row.minPrice),
-            ruleLabel: String(row.item || ''),
-          };
-        }
-      }
-
-      // Fallback cho dữ liệu bị hở mốc biên (vd: "<30.000" và ">30.000")
-      // Ưu tiên lấy rule phía trên mốc (>) để không báo "không tìm thấy đơn giá".
-      const boundaryRule = parsedRules.find((rule) => rule.operator === '>' && qty === rule.threshold)
-        || parsedRules.find((rule) => rule.operator === '<' && qty === rule.threshold);
-      if (boundaryRule) {
-        return {
-          donGia: safeParseNumber(boundaryRule.row.price),
-          minPrice: safeParseNumber(boundaryRule.row.minPrice),
-          ruleLabel: String(boundaryRule.row.item || ''),
-        };
-      }
-
-      return { donGia: 0, minPrice: 0, ruleLabel: '' };
-    };
-
-    // 2. Tiền kẽm & In (Mặc định Hộp mềm in 1 mặt)
+    // 2. Tiền kẽm & In
+    // khac_nhau: 2 bài in riêng → kẽm × 2, công in tính từng bài rồi × 2
     const soKem = printColors;
     const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
     const giaKem = selectedPrinterObj ? parseFloat(selectedPrinterObj.platePrice) || 0 : 0;
-    const tienKem = soKem * giaKem;
+    const tienKem = sooBaiIn * soKem * giaKem;
 
-    const soLuotInMoiKem = soToInLyThuyet;
-    const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000); 
+    // soLuotInMoiKem: số tờ của 1 bài in (khac_nhau = qty; các TH khác = soToInLyThuyet)
+    const soLuotInMoiKem = sooBaiIn === 2 ? soToInMotBai : soToInLyThuyet;
+    const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000);
     const giaLuotCoBan = selectedPrinterObj ? parseFloat(selectedPrinterObj.runPrice) || 0 : 0;
     const giaLuot = printColors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
-    const tienIn = quaLuotMoiKem * soKem * giaLuot;
+    const tienIn = sooBaiIn * quaLuotMoiKem * soKem * giaLuot;
 
     // 3. Tiền cán màng
     const haoIn = 30;
@@ -362,18 +382,26 @@ function TuiGiayCalculator() {
       }
     }
 
-    // 4. Tiền gia công
-    const giaCongRule = getGiaCongRule();
-    const giaCongDonGia = giaCongRule.donGia;
-    const soLuongGiaCong = qty + 50;
-    const tienGiaCongTinhTheoSL = soLuongGiaCong * giaCongDonGia;
-    const tienGiaCong = Math.max(tienGiaCongTinhTheoSL, giaCongRule.minPrice);
-    const isMinGiaCongApplied = giaCongRule.minPrice > 0 && tienGiaCong === giaCongRule.minPrice;
-    const giaCongDetail = giaCongDonGia > 0
-      ? isMinGiaCongApplied
-        ? `(${soLuongGiaCong.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ, áp tối thiểu ${Math.round(giaCongRule.minPrice).toLocaleString('vi-VN')}đ${giaCongRule.ruleLabel ? ` - ${giaCongRule.ruleLabel}` : ''})`
-        : `(${soLuongGiaCong.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ${giaCongRule.ruleLabel ? ` - ${giaCongRule.ruleLabel}` : ''})`
-      : '(Không tìm thấy đơn giá gia công)';
+    // 4. Tiền gia công (bảng Sheet Gia công túi theo Hông Y + số mảnh; tối thiểu / đơn hàng)
+    const giaCongUnit = computeTuiGiayGiaCongUnit({
+      soManh,
+      hongYcm: boxDepth,
+      paperType,
+      paperGsm,
+      quai,
+      finishingDatabase,
+    });
+    const giaCongDonGia = giaCongUnit.donGia;
+    const tienGiaCongTinhTheoSL = qty * giaCongDonGia;
+    const tienGiaCong = Math.max(tienGiaCongTinhTheoSL, giaCongUnit.minOrder);
+    const isMinGiaCongApplied = tienGiaCongTinhTheoSL < giaCongUnit.minOrder;
+    const phuPhiBits = [];
+    if (giaCongUnit.kraftTrang100120) phuPhiBits.push('+500đ Kraft trắng 100/120');
+    if (giaCongUnit.quaiPremium) phuPhiBits.push('+500đ quai (Dây đẹp/Lụa)');
+    const phuPhiText = phuPhiBits.length ? `; ${phuPhiBits.join('; ')}` : '';
+    const giaCongDetail = isMinGiaCongApplied
+      ? `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText}; áp tối thiểu đơn hàng ${giaCongUnit.minOrder.toLocaleString('vi-VN')}đ)`
+      : `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText})`;
 
     // 5. Tiền khuôn bế
     const tienKhuonBe = parseFloat(dieCost) || 0;
@@ -392,7 +420,7 @@ function TuiGiayCalculator() {
       costs: {
         tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
-        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail, giaCongDetail
+        soKem, giaKem, quaLuotMoiKem, giaLuot, sooBaiIn, canDetail, giaCongDetail
       }
     });
 
@@ -796,7 +824,11 @@ function TuiGiayCalculator() {
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
                         <span>3. Tiền xuất kẽm</span>
-                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">({result.costs.soKem} kẽm × {result.costs.giaKem.toLocaleString('vi-VN')}đ)</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">
+                          {result.costs.sooBaiIn === 2
+                            ? `(${result.costs.soKem} kẽm × ${result.costs.giaKem.toLocaleString('vi-VN')}đ) × 2 bài in`
+                            : `(${result.costs.soKem} kẽm × ${result.costs.giaKem.toLocaleString('vi-VN')}đ)`}
+                        </span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKem).toLocaleString('vi-VN')} đ</span>
                     </div>
@@ -805,7 +837,13 @@ function TuiGiayCalculator() {
                       <div className="pr-4 text-slate-600">
                         <span>4. Tiền công in</span>
                         <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">
-                          ({result.costs.quaLuotMoiKem > 0 ? `${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ` : 'Miễn phí ≤ 1.000 lượt/kẽm'})
+                          {result.costs.sooBaiIn === 2
+                            ? result.costs.quaLuotMoiKem > 0
+                              ? `(${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ) × 2 bài in`
+                              : '(Miễn phí ≤ 1.000 lượt/kẽm) × 2 bài in'
+                            : result.costs.quaLuotMoiKem > 0
+                              ? `(${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ)`
+                              : '(Miễn phí ≤ 1.000 lượt/kẽm)'}
                         </span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienIn).toLocaleString('vi-VN')} đ</span>

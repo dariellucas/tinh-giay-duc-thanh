@@ -83,8 +83,12 @@ function computeTuiGiayFlatDimMetrics(X, Y, Z, gapMiec, taiDan) {
   return { pad, dimDetail, dimGap, tick, extGap, textGap };
 }
 
-/** Kích thước dọc (trái) + ngang (dưới) — cùng logic bố cục với HopMem FlatLayoutViewer */
-function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, dimDetail, dimGap, tick, extGap, textGap }) {
+/**
+ * Kích thước dọc (trái) + ngang (dưới) — cùng logic bố cục với HopMem FlatLayoutViewer.
+ * hTotalSegments (tùy chọn): [{x1, x2, label}] — nếu có, thay thế đường tổng đơn bằng
+ * nhiều đoạn tổng riêng (dùng cho "2 mảnh mặt khác nhau").
+ */
+function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, dimDetail, dimGap, tick, extGap, textGap, hTotalSegments, hBaseSegments }) {
   const theme = FLAT_THEME;
 
   const vBaseX = minX - dimDetail;
@@ -156,7 +160,12 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
             strokeDasharray="4,4"
           />
         ))}
-        <line x1={minX} y1={hBaseY} x2={maxX} y2={hBaseY} stroke={theme.dim} />
+        {hBaseSegments && hBaseSegments.length > 0
+          ? hBaseSegments.map((seg, i) => (
+              <line key={`hBase-${i}`} x1={seg.x1} y1={hBaseY} x2={seg.x2} y2={hBaseY} stroke={theme.dim} />
+            ))
+          : <line x1={minX} y1={hBaseY} x2={maxX} y2={hBaseY} stroke={theme.dim} />
+        }
         {hPoints.map((pt, i) => (
           <g key={`hTick-${i}`}>
             <line x1={pt.x} y1={hBaseY - tick} x2={pt.x} y2={hBaseY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
@@ -174,19 +183,27 @@ function TuiGiayFlatDimensions({ minX, maxX, minY, maxY, vPoints, hPoints, vbW, 
             )}
           </g>
         ))}
-        <line x1={minX} y1={hTotalY} x2={maxX} y2={hTotalY} stroke={theme.dim} />
-        <line x1={minX} y1={hTotalY - tick} x2={minX} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
-        <line x1={maxX} y1={hTotalY - tick} x2={maxX} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
-        <text
-          x={(minX + maxX) / 2}
-          y={hTotalY - textGap}
-          fill={theme.dimText}
-          stroke="none"
-          fontSize={dimFontSize}
-          fontWeight="normal"
-        >
-          {fmtDim(maxX - minX)}
-        </text>
+        {hTotalSegments && hTotalSegments.length > 0 ? (
+          hTotalSegments.map((seg, i) => (
+            <g key={`hTotalSeg-${i}`}>
+              <line x1={seg.x1} y1={hTotalY} x2={seg.x2} y2={hTotalY} stroke={theme.dim} />
+              <line x1={seg.x1} y1={hTotalY - tick} x2={seg.x1} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
+              <line x1={seg.x2} y1={hTotalY - tick} x2={seg.x2} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
+              <text x={(seg.x1 + seg.x2) / 2} y={hTotalY - textGap} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">
+                {fmtDim(seg.label)}
+              </text>
+            </g>
+          ))
+        ) : (
+          <>
+            <line x1={minX} y1={hTotalY} x2={maxX} y2={hTotalY} stroke={theme.dim} />
+            <line x1={minX} y1={hTotalY - tick} x2={minX} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
+            <line x1={maxX} y1={hTotalY - tick} x2={maxX} y2={hTotalY + tick} stroke={theme.dim} strokeWidth={strokeW * 1.5} />
+            <text x={(minX + maxX) / 2} y={hTotalY - textGap} fill={theme.dimText} stroke="none" fontSize={dimFontSize} fontWeight="normal">
+              {fmtDim(maxX - minX)}
+            </text>
+          </>
+        )}
       </g>
     </>
   );
@@ -279,6 +296,8 @@ function TuiGiayFlatLayoutViewer({
   let maxY = 0;
   let vPoints = [];
   let hPoints = [];
+  let hBaseSegments = null;  // null → dùng đường chi tiết đơn mặc định
+  let hTotalSegments = null; // null → dùng đường tổng đơn mặc định
 
   if (soManh === '1_manh') {
     caption = 'Túi 1 mảnh — Ngang: Tai dán + Ngang×2 + Hông×2 ; Cao: Gấp miệng + Cao + Đáy (Y/2+2)';
@@ -340,6 +359,15 @@ function TuiGiayFlatLayoutViewer({
       { x: x2 + taiDan, val: X },
       { x: x2 + taiDan + X, val: Y },
       { x: maxX, val: 0 },
+    ];
+    // Đường chi tiết và đường tổng đều tách thành 2 đoạn riêng mỗi mảnh
+    hBaseSegments = [
+      { x1: 0, x2: pieceW },
+      { x1: x2, x2: maxX },
+    ];
+    hTotalSegments = [
+      { x1: 0, x2: pieceW, label: pieceW },
+      { x1: x2, x2: maxX, label: pieceW },
     ];
   }
 
@@ -449,6 +477,8 @@ function TuiGiayFlatLayoutViewer({
           tick={tick}
           extGap={extGap}
           textGap={textGap}
+          hBaseSegments={hBaseSegments}
+          hTotalSegments={hTotalSegments}
         />
         <g>{body}</g>
       </svg>

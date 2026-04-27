@@ -57,6 +57,15 @@ export const DEFAULT_FINISHING_DATA = [
   { item: 'Khâu keo', price: 20, unit: 'VNĐ / 1 trang', minPrice: 1500000 },
   { item: 'Gáy lò xo A4', price: 4500, unit: 'VNĐ / 1 quyển', minPrice: 300000 },
   { item: 'Gáy lò xo A5', price: 3500, unit: 'VNĐ / 1 quyển', minPrice: 300000 },
+  // Gia công túi (Sheet GiaCong — Hông Y map vào cột “cạnh” trên sheet; đồng bộ văn bản hạng mục)
+  { item: 'Túi 1 mảnh có cạnh <=10', price: 1500, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 1 mảnh có cạnh <=14', price: 1500, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 1 mảnh có cạnh <=17', price: 1700, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 1 mảnh có cạnh >17', price: 1900, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 2 mảnh có cạnh <=10', price: 1800, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 2 mảnh có cạnh <=14', price: 1900, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 2 mảnh có cạnh <=17', price: 2000, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
+  { item: 'Túi 2 mảnh có cạnh >17', price: 2100, unit: 'VNĐ / 1 chiếc', minPrice: 300000 },
 ];
 
 export const DEFAULT_DINHMUC_DATA = [
