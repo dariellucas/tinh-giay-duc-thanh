@@ -4,7 +4,7 @@ import { DEFAULT_GAP_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { useDebounce } from '../hooks/useDebounce';
-import { findFinishingByName } from '../utils/finishingUtils';
+import { calculateEmbossCost, calculateFoilCost, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
 function HopMemCalculator() {
@@ -403,6 +403,45 @@ function HopMemCalculator() {
       }
     }
 
+    // Ép nhũ / thúc nổi: tính theo số lượng thành phẩm + bù hao in.
+    let foilDieCost = 0;
+    let foilDieDetail = '';
+    let foilCost = 0;
+    let foilDetail = '';
+    if (hasFoil) {
+      const foilResult = calculateFoilCost(finishingDatabase, foilLength, foilWidth, qty, dynamicSpoilage);
+      foilDieCost = foilResult.dieCost;
+      foilCost = foilResult.impressionCost;
+      const { areaCm2: foilArea, dieUnitPrice, dieBaseCost, pricePerCm2, pricePerHit, costPerUnit, totalImpressions, missingRows } = foilResult.details;
+      const missingFoilDie = missingRows.includes('Khuôn nhũ');
+      const missingFoilWork = missingRows.filter((row) => row !== 'Khuôn nhũ');
+      foilDieDetail = missingFoilDie
+        ? '(Thiếu dòng GiaCong: Khuôn nhũ)'
+        : `(${foilArea.toLocaleString('vi-VN')}cm² × ${dieUnitPrice}đ/cm²${dieBaseCost < foilResult.dieMin ? `, áp tối thiểu ${Math.round(foilResult.dieMin).toLocaleString('vi-VN')}đ` : ''})`;
+      foilDetail = missingFoilWork.length > 0
+        ? `(Thiếu dòng GiaCong: ${missingFoilWork.join(', ')})`
+        : `(${totalImpressions.toLocaleString('vi-VN')} nhát × ${Math.round(costPerUnit).toLocaleString('vi-VN')}đ, diện tích ${foilArea.toLocaleString('vi-VN')}cm² × ${pricePerCm2}đ/cm², tối thiểu theo nhát ${pricePerHit}đ)`;
+    }
+
+    let embossDieCost = 0;
+    let embossDieDetail = '';
+    let embossCost = 0;
+    let embossDetail = '';
+    if (hasEmboss) {
+      const embossResult = calculateEmbossCost(finishingDatabase, embossLength, embossWidth, qty, dynamicSpoilage);
+      embossDieCost = embossResult.dieCost;
+      embossCost = embossResult.impressionCost;
+      const { areaCm2: embossArea, dieUnitPrice, dieBaseCost, pricePerHit, totalImpressions, missingRows } = embossResult.details;
+      const missingEmbossDie = missingRows.includes('Khuôn thúc nổi');
+      const missingEmbossWork = missingRows.filter((row) => row !== 'Khuôn thúc nổi');
+      embossDieDetail = missingEmbossDie
+        ? '(Thiếu dòng GiaCong: Khuôn thúc nổi)'
+        : `(${embossArea.toLocaleString('vi-VN')}cm² × ${dieUnitPrice}đ/cm²${dieBaseCost < embossResult.dieMin ? `, áp tối thiểu ${Math.round(embossResult.dieMin).toLocaleString('vi-VN')}đ` : ''})`;
+      embossDetail = missingEmbossWork.length > 0
+        ? `(Thiếu dòng GiaCong: ${missingEmbossWork.join(', ')})`
+        : `(${totalImpressions.toLocaleString('vi-VN')} lượt × ${Math.round(pricePerHit).toLocaleString('vi-VN')}đ)`;
+    }
+
     // 4. Tiền gia công
     const giaCongRule = getGiaCongRule();
     const giaCongDonGia = giaCongRule.donGia;
@@ -422,7 +461,7 @@ function HopMemCalculator() {
     // 6. Tiền vận chuyển
     const tienVanChuyen = safeParseNumber(shippingCost); 
 
-    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienGiaCong + tienKhuonBe + tienVanChuyen;
+    const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + foilDieCost + foilCost + embossDieCost + embossCost + tienGiaCong + tienKhuonBe + tienVanChuyen;
     const giaBan = giaSanXuat * markup;
     const donGiaSP = giaBan / qty;
 
@@ -430,9 +469,9 @@ function HopMemCalculator() {
       itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
       costs: {
-        tienGiay, tienXaLo, tienKem, tienIn, tienCan, tienGiaCong, tienKhuonBe, tienVanChuyen,
+        tienGiay, tienXaLo, tienKem, tienIn, tienCan, foilDieCost, foilCost, embossDieCost, embossCost, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
-        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail, giaCongDetail
+        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail, foilDieDetail, foilDetail, embossDieDetail, embossDetail, giaCongDetail
       }
     });
 
@@ -835,10 +874,50 @@ function HopMemCalculator() {
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienCan).toLocaleString('vi-VN')} đ</span>
                     </div>
+
+                    {result.costs.foilDieDetail && (
+                      <div className="flex justify-between items-start text-sm py-1.5">
+                        <div className="pr-4 text-slate-600">
+                          <span>6. Tiền khuôn nhũ:</span>
+                          <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.foilDieDetail}</span>
+                        </div>
+                        <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.foilDieCost).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    {result.costs.foilDetail && (
+                      <div className="flex justify-between items-start text-sm py-1.5">
+                        <div className="pr-4 text-slate-600">
+                          <span>7. Tiền ép nhũ:</span>
+                          <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.foilDetail}</span>
+                        </div>
+                        <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.foilCost).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    {result.costs.embossDieDetail && (
+                      <div className="flex justify-between items-start text-sm py-1.5">
+                        <div className="pr-4 text-slate-600">
+                          <span>8. Tiền khuôn thúc nổi:</span>
+                          <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.embossDieDetail}</span>
+                        </div>
+                        <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.embossDieCost).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
+
+                    {result.costs.embossDetail && (
+                      <div className="flex justify-between items-start text-sm py-1.5">
+                        <div className="pr-4 text-slate-600">
+                          <span>9. Tiền thúc nổi:</span>
+                          <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.embossDetail}</span>
+                        </div>
+                        <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.embossCost).toLocaleString('vi-VN')} đ</span>
+                      </div>
+                    )}
                     
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
-                        <span>6. Tiền gia công:</span>
+                        <span>10. Tiền gia công:</span>
                         <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.giaCongDetail}</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienGiaCong).toLocaleString('vi-VN')} đ</span>
@@ -846,14 +925,14 @@ function HopMemCalculator() {
 
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
-                        <span>7. Tiền khuôn bế:</span>
+                        <span>11. Tiền khuôn bế:</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKhuonBe).toLocaleString('vi-VN')} đ</span>
                     </div>
 
                     <div className="flex justify-between items-start text-sm py-1.5 border-b border-slate-100 pb-3">
                       <div className="pr-4 text-slate-600">
-                        <span>8. Tiền vận chuyển:</span>
+                        <span>12. Tiền vận chuyển:</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienVanChuyen).toLocaleString('vi-VN')} đ</span>
                     </div>
