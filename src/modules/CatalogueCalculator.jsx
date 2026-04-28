@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BookOpen, Layers, Maximize, Printer, RefreshCw } from 'lucide-react';
-import { BINDING_TYPES, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
+import { BINDING_TYPES, DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES } from '../constants/pricingConstants';
 import CatalogueSignatureCanvas from '../components/viewers/CatalogueSignatureCanvas';
 import { usePricingDataContext } from '../context/PricingDataContext';
-import { findFinishingByName } from '../utils/finishingUtils';
+import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
+import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
 function CatalogueCalculator() {
   const {
@@ -74,11 +75,11 @@ function CatalogueCalculator() {
     let pw = 0, ph = 0;
     if (coverParentSizeIdx === '') { pw = 0; ph = 0; }
     else if (coverParentSizeIdx === PARENT_PAPER_SIZES.length) {
-      pw = parseFloat(coverCustomParentW) || 0;
-      ph = parseFloat(coverCustomParentH) || 0;
+      pw = safeParseNumber(coverCustomParentW);
+      ph = safeParseNumber(coverCustomParentH);
     } else if (coverParentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      pw = (parseFloat(coverRollWidth) || 0) / coverRollSplit;
-      ph = parseFloat(coverRollCutLength) || 0;
+      pw = safeParseNumber(coverRollWidth) / coverRollSplit;
+      ph = safeParseNumber(coverRollCutLength);
     } else {
       pw = PARENT_PAPER_SIZES[coverParentSizeIdx]?.w || 0;
       ph = PARENT_PAPER_SIZES[coverParentSizeIdx]?.h || 0;
@@ -88,16 +89,7 @@ function CatalogueCalculator() {
 
   const validCoverPrinters = useMemo(() => {
     if (!printerDatabase) return [];
-    return printerDatabase.filter(p => {
-      const normalizedName = p.name.replace(/,/g, '.');
-      const match = normalizedName.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/);
-      if (match) {
-        const pMax = Math.max(parseFloat(match[1]), parseFloat(match[2]));
-        const pMin = Math.min(parseFloat(match[1]), parseFloat(match[2]));
-        return pMax >= coverReqMax && pMin >= coverReqMin;
-      }
-      return true;
-    });
+    return filterPrintersBySize(printerDatabase, coverReqMax, coverReqMin);
   }, [printerDatabase, coverReqMax, coverReqMin]);
 
   useEffect(() => {
@@ -114,11 +106,11 @@ function CatalogueCalculator() {
     let pw = 0, ph = 0;
     if (innerParentSizeIdx === '') { pw = 0; ph = 0; }
     else if (innerParentSizeIdx === PARENT_PAPER_SIZES.length) {
-      pw = parseFloat(innerCustomParentW) || 0;
-      ph = parseFloat(innerCustomParentH) || 0;
+      pw = safeParseNumber(innerCustomParentW);
+      ph = safeParseNumber(innerCustomParentH);
     } else if (innerParentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      pw = (parseFloat(innerRollWidth) || 0) / innerRollSplit;
-      ph = parseFloat(innerRollCutLength) || 0;
+      pw = safeParseNumber(innerRollWidth) / innerRollSplit;
+      ph = safeParseNumber(innerRollCutLength);
     } else {
       pw = PARENT_PAPER_SIZES[innerParentSizeIdx]?.w || 0;
       ph = PARENT_PAPER_SIZES[innerParentSizeIdx]?.h || 0;
@@ -128,16 +120,7 @@ function CatalogueCalculator() {
 
   const validInnerPrinters = useMemo(() => {
     if (!printerDatabase) return [];
-    return printerDatabase.filter(p => {
-      const normalizedName = p.name.replace(/,/g, '.');
-      const match = normalizedName.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/);
-      if (match) {
-        const pMax = Math.max(parseFloat(match[1]), parseFloat(match[2]));
-        const pMin = Math.min(parseFloat(match[1]), parseFloat(match[2]));
-        return pMax >= innerReqMax && pMin >= innerReqMin;
-      }
-      return true;
-    });
+    return filterPrintersBySize(printerDatabase, innerReqMax, innerReqMin);
   }, [printerDatabase, innerReqMax, innerReqMin]);
 
   useEffect(() => {
@@ -188,8 +171,8 @@ function CatalogueCalculator() {
 
     let pW, pH;
     if (productTypeIdx === PRODUCT_SIZES.length - 1) {
-      pW = parseFloat(customW);
-      pH = parseFloat(customH);
+      pW = safeParseNumber(customW);
+      pH = safeParseNumber(customH);
     } else {
       const sizeObj = isKhoThieu && KHO_THIEU_SIZES[productTypeIdx] ? KHO_THIEU_SIZES[productTypeIdx] : PRODUCT_SIZES[productTypeIdx];
       pW = sizeObj?.w || 21;
@@ -201,8 +184,8 @@ function CatalogueCalculator() {
 
     const getPaperSize = (idx, customPw, customPh, rollW, rollSplit, rollCutL) => {
       if (idx === '') return null;
-      if (idx === PARENT_PAPER_SIZES.length) return { w: parseFloat(customPw)||0, h: parseFloat(customPh)||0 };
-      if (idx === PARENT_PAPER_SIZES.length + 1) return { w: (parseFloat(rollW)||0) / rollSplit, h: parseFloat(rollCutL)||0 };
+      if (idx === PARENT_PAPER_SIZES.length) return { w: safeParseNumber(customPw), h: safeParseNumber(customPh) };
+      if (idx === PARENT_PAPER_SIZES.length + 1) return { w: safeParseNumber(rollW) / rollSplit, h: safeParseNumber(rollCutL) };
       return PARENT_PAPER_SIZES[idx];
     };
 
@@ -226,16 +209,16 @@ function CatalogueCalculator() {
     if (innerSize) innerSize = formatParent(innerSize);
 
     let signatures = [];
-    const GAP = 0.4;
-    const GRIPPER = 1.0;
+    const GAP = DEFAULT_GAP_CM;
+    const GRIPPER = DEFAULT_GRIPPER_CM;
     const qtyInt = parseInt(quantity) || 0;
     
     const spreadW = prodW * 2;
     const spreadH = prodH;
     
     const processSignatures = (totalP, pSize, prefixName, isCoverOnly, pType, pGsm) => {
-       const usableW = pSize.w - 0.4; 
-       const usableH = pSize.h - GRIPPER - 0.2; 
+       const usableW = pSize.w - DEFAULT_GAP_CM; 
+       const usableH = pSize.h - GRIPPER - PRINT_MARGIN_CM; 
 
        const findGrid = (targetPages) => {
            const spreadsPerSide = targetPages / 4; 
@@ -307,21 +290,7 @@ function CatalogueCalculator() {
            if (!grid) grid = { c: 1, r: 1, itemW: spreadW, itemH: spreadH, isRotated: false };
 
            const sheets = Math.ceil(qtyInt / dupCount);
-           let spoil = 100; 
-
-           if (dinhMucDatabase && dinhMucDatabase.length > 0) {
-               const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
-               for (let i = 0; i < printSpoilageRules.length; i++) {
-                   const rule = printSpoilageRules[i];
-                   const fromQ = parseInt(rule.fromQty) || 0;
-                   const toQ = parseInt(rule.toQty) || 0;
-                   const spoilVal = parseInt(rule.spoilage) || 0;
-                   if (sheets >= fromQ && sheets <= toQ) {
-                       spoil = spoilVal;
-                       break;
-                   }
-               }
-           }
+           let spoil = getSpoilageByQuantity(dinhMucDatabase, sheets); 
 
            if (dupCount === 1) {
                spoil += 50;
@@ -431,8 +400,8 @@ function CatalogueCalculator() {
       const pricePerTon = paperDatabase[sig.paperType] && paperDatabase[sig.paperType][sig.paperGsm] 
         ? paperDatabase[sig.paperType][sig.paperGsm].price 
         : 0; 
-      const pricePerKg = pricePerTon * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
-      const sigCostVnd = totalWeightKg * pricePerKg;
+      const pricePerKg = safeParseNumber(pricePerTon) * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
+      const sigCostVnd = calculatePaperCost(Pw, Ph, sig.paperGsm, sig.totalSheets, pricePerTon);
 
       tongTrongLuongKg += totalWeightKg;
       tongSoToIn += sig.totalSheets;
@@ -444,8 +413,8 @@ function CatalogueCalculator() {
       const printerId = isCov ? coverPrinter : innerPrinter;
       const printerObj = printerDatabase.find(p => p.id === printerId);
       
-      const giaKem = printerObj ? parseFloat(printerObj.platePrice) || 0 : 0;
-      const giaLuotCoBan = printerObj ? parseFloat(printerObj.runPrice) || 0 : 0;
+      const giaKem = printerObj ? safeParseNumber(printerObj.platePrice) : 0;
+      const giaLuotCoBan = printerObj ? safeParseNumber(printerObj.runPrice) : 0;
       const giaLuot = colors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
 
       let soKemSig = 0;
@@ -524,7 +493,7 @@ function CatalogueCalculator() {
     }
 
     const xaLoObj = findFinishingByName(finishingDatabase, 'xả lô');
-    const minXaLoPrice = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
+    const minXaLoPrice = xaLoObj ? safeParseNumber(xaLoObj.minPrice) : 150000;
 
     let tienXaLoBia = 0, tienXaLoRuot = 0;
     if (coverParentSizeIdx === PARENT_PAPER_SIZES.length + 1) tienXaLoBia = minXaLoPrice;
@@ -539,8 +508,8 @@ function CatalogueCalculator() {
         const canObj = findFinishingByName(finishingDatabase, canName);
         if (canObj) {
             const totalArea = areaBia * toCanBia * coverLaminationSides;
-            const cost = totalArea * parseFloat(canObj.price);
-            tienCanBia = Math.max(cost, parseFloat(canObj.minPrice));
+            const cost = totalArea * safeParseNumber(canObj.price);
+            tienCanBia = Math.max(cost, safeParseNumber(canObj.minPrice));
             coverCanDetail = `(Bìa: ${toCanBia.toLocaleString('vi-VN')} tờ × ${coverLaminationSides} mặt × ${areaBia.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
         }
     }
@@ -550,8 +519,8 @@ function CatalogueCalculator() {
         const canObj = findFinishingByName(finishingDatabase, canName);
         if (canObj) {
             const totalArea = areaRuot * toCanRuot * innerLaminationSides;
-            const cost = totalArea * parseFloat(canObj.price);
-            tienCanRuot = Math.max(cost, parseFloat(canObj.minPrice));
+            const cost = totalArea * safeParseNumber(canObj.price);
+            tienCanRuot = Math.max(cost, safeParseNumber(canObj.minPrice));
             innerCanDetail = `(Ruột: ${toCanRuot.toLocaleString('vi-VN')} tờ × ${innerLaminationSides} mặt × ${areaRuot.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
         }
     }
@@ -565,9 +534,9 @@ function CatalogueCalculator() {
     const xenObj = findFinishingByName(finishingDatabase, 'xén');
     if (xenObj) {
         const reams = tongSoToIn / 500;
-        const cost = reams * parseFloat(xenObj.price);
-        tienXen = Math.max(cost, parseFloat(xenObj.minPrice));
-        xenDetail = `(${reams.toFixed(1)} ram × ${parseFloat(xenObj.price).toLocaleString('vi-VN')}đ)`;
+        const cost = reams * safeParseNumber(xenObj.price);
+        tienXen = Math.max(cost, safeParseNumber(xenObj.minPrice));
+        xenDetail = `(${reams.toFixed(1)} ram × ${safeParseNumber(xenObj.price).toLocaleString('vi-VN')}đ)`;
     }
 
     // THUẬT TOÁN ĐÓNG CUỐN
@@ -608,8 +577,8 @@ function CatalogueCalculator() {
         finishingObj = findFinishingByName(finishingDatabase, 'Gáy lò xo'); 
     }
 
-    const actualPrice = finishingObj ? parseFloat(finishingObj.price) : defaultPrice;
-    const actualMin = finishingObj ? parseFloat(finishingObj.minPrice) : defaultMin;
+    const actualPrice = finishingObj ? safeParseNumber(finishingObj.price) : defaultPrice;
+    const actualMin = finishingObj ? safeParseNumber(finishingObj.minPrice) : defaultMin;
 
     if (calcType === 'page') {
         const cost = actualPrice * totalP * qtyInt;
@@ -621,7 +590,7 @@ function CatalogueCalculator() {
         dongCuonDetail = `(${qtyInt.toLocaleString('vi-VN')} cuốn × ${actualPrice.toLocaleString('vi-VN')}đ)`;
     }
 
-    const tienVanChuyen = parseFloat(shippingCost) || 0;
+    const tienVanChuyen = safeParseNumber(shippingCost);
 
     const giaSanXuat = tongTienGiay + tongTienXaLo + tongTienKem + tongTienIn + tongTienCan + tienXen + tienDongCuon + tienVanChuyen;
     const giaBan = giaSanXuat * markup;

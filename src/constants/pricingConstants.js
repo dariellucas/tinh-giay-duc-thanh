@@ -1,5 +1,12 @@
 export const GOOGLE_SHEETS_API_URL = 'https://script.google.com/macros/s/AKfycbxxxG6_SjHC3__zrbNV2s5wTr2ngrj_4Az1xcxhpe9xR-KSowPMnwcKF_ro5s3Le-J0/exec';
 
+export const PRINT_MARGIN_CM = 0.2;
+export const DEFAULT_GAP_CM = 0.4;
+export const DEFAULT_GRIPPER_CM = 1.0;
+export const HAO_IN = 30;
+export const HAO_CAN = 20;
+export const HAO_GAP = 20;
+
 export const DEFAULT_PAPER_DATA = [
   { paperType: 'Couche', gsm: 80, price: 22.4, rolls: '62; 65; 72; 79; 86; 109' },
   { paperType: 'Couche', gsm: 100, price: 20.8, rolls: '62; 65; 72; 79; 86; 102; 109' },

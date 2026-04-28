@@ -1,11 +1,11 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
-import { LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
+import { DEFAULT_GAP_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { useDebounce } from '../hooks/useDebounce';
 import { findFinishingByName } from '../utils/finishingUtils';
-import { safeParseNumber } from '../utils/numberUtils';
+import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
 function HopMemCalculator() {
   const {
@@ -112,7 +112,7 @@ function HopMemCalculator() {
     
     const singleW = maxX - minX;
     const singleH = maxY - minY;
-    const gap = muonSong ? 0 : 0.4;
+    const gap = muonSong ? 0 : DEFAULT_GAP_CM;
 
     const stepW = singleW - overlapX + gap;
     const stepH = singleH - overlapY + gap;
@@ -175,7 +175,7 @@ function HopMemCalculator() {
     const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
     const singleW = maxX - minX;
     const singleH = maxY - minY;
-    const gap = dMuonSong ? 0 : 0.4;
+    const gap = dMuonSong ? 0 : DEFAULT_GAP_CM;
     const stepW = singleW - overlapX + gap;
     const stepH = singleH - overlapY + gap;
 
@@ -236,11 +236,11 @@ function HopMemCalculator() {
   const currentPaperSize = useMemo(() => {
     let Pw = 0, Ph = 0;
     if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
-      Pw = parseFloat(customParentW) || 0;
-      Ph = parseFloat(customParentH) || 0;
+      Pw = safeParseNumber(customParentW);
+      Ph = safeParseNumber(customParentH);
     } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      Pw = (parseFloat(rollWidth) || 0) / rollSplit;
-      Ph = parseFloat(rollCutLength) || 0;
+      Pw = safeParseNumber(rollWidth) / rollSplit;
+      Ph = safeParseNumber(rollCutLength);
     } else if (parentSizeIdx !== '') {
       Pw = PARENT_PAPER_SIZES[parentSizeIdx]?.w || 0;
       Ph = PARENT_PAPER_SIZES[parentSizeIdx]?.h || 0;
@@ -249,7 +249,7 @@ function HopMemCalculator() {
   }, [parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength]);
 
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
-  const hasValidDimensions = parseFloat(boxWidth) > 0 && parseFloat(boxDepth) > 0 && parseFloat(boxHeight) > 0;
+  const hasValidDimensions = safeParseNumber(boxWidth) > 0 && safeParseNumber(boxDepth) > 0 && safeParseNumber(boxHeight) > 0;
 
   const handleCalculate = () => {
     if (!boxWidth || !boxDepth || !boxHeight || !quantity || !paperType || !paperGsm || parentSizeIdx === '' || !selectedPrinter) {
@@ -269,11 +269,11 @@ function HopMemCalculator() {
 
     let Pw = 0, Ph = 0;
     if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
-      Pw = parseFloat(customParentW) || 0;
-      Ph = parseFloat(customParentH) || 0;
+      Pw = safeParseNumber(customParentW);
+      Ph = safeParseNumber(customParentH);
     } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      Pw = (parseFloat(rollWidth) || 0) / rollSplit;
-      Ph = parseFloat(rollCutLength) || 0;
+      Pw = safeParseNumber(rollWidth) / rollSplit;
+      Ph = safeParseNumber(rollCutLength);
     } else {
       Pw = PARENT_PAPER_SIZES[parentSizeIdx]?.w || 0;
       Ph = PARENT_PAPER_SIZES[parentSizeIdx]?.h || 0;
@@ -295,21 +295,7 @@ function HopMemCalculator() {
 
     const itemsPerSheet = cols * rows;
     const soToInLyThuyet = Math.ceil(qty / itemsPerSheet);
-    let dynamicSpoilage = 100; // Giá trị mặc định
-    if (dinhMucDatabase && dinhMucDatabase.length > 0) {
-      const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
-      for (let i = 0; i < printSpoilageRules.length; i++) {
-        const rule = printSpoilageRules[i];
-        const fromQ = parseInt(rule.fromQty) || 0;
-        const toQ = parseInt(rule.toQty) || 0;
-        const spoilVal = parseInt(rule.spoilage) || 0;
-
-        if (soToInLyThuyet >= fromQ && soToInLyThuyet <= toQ) {
-          dynamicSpoilage = spoilVal;
-          break;
-        }
-      }
-    }
+    const dynamicSpoilage = getSpoilageByQuantity(dinhMucDatabase, soToInLyThuyet);
     const parentSheetsNeeded = soToInLyThuyet + dynamicSpoilage;
 
     // 1. Tiền giấy
@@ -317,14 +303,14 @@ function HopMemCalculator() {
     const areaM2 = (Pw * Ph) / 10000;
     const weightPerSheetKg = (areaM2 * paperGsm) / 1000;
     const totalWeightKg = weightPerSheetKg * parentSheetsNeeded;
-    const pricePerKg = pricePerTon * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
-    const tienGiay = totalWeightKg * pricePerKg;
+    const pricePerKg = safeParseNumber(pricePerTon) * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
+    const tienGiay = calculatePaperCost(Pw, Ph, paperGsm, parentSheetsNeeded, pricePerTon);
 
     // Tiền xả lô
     let tienXaLo = 0;
     if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
       const xaLoObj = findFinishingByName(finishingDatabase, 'xả lô');
-      tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
+      tienXaLo = xaLoObj ? safeParseNumber(xaLoObj.minPrice) : 150000;
     }
 
     const getGiaCongRule = () => {
@@ -392,29 +378,27 @@ function HopMemCalculator() {
     // 2. Tiền kẽm & In (Mặc định Hộp mềm in 1 mặt)
     const soKem = printColors;
     const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
-    const giaKem = selectedPrinterObj ? parseFloat(selectedPrinterObj.platePrice) || 0 : 0;
+    const giaKem = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.platePrice) : 0;
     const tienKem = soKem * giaKem;
 
     const soLuotInMoiKem = soToInLyThuyet;
     const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000); 
-    const giaLuotCoBan = selectedPrinterObj ? parseFloat(selectedPrinterObj.runPrice) || 0 : 0;
+    const giaLuotCoBan = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.runPrice) : 0;
     const giaLuot = printColors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
     const tienIn = quaLuotMoiKem * soKem * giaLuot;
 
     // 3. Tiền cán màng
-    const haoIn = 30;
-    const haoCan = 20;
     let tienCan = 0;
     let canDetail = '';
     if (lamination !== 'none') {
       const canName = lamination === 'matte' ? 'cán mờ' : 'cán bóng';
       const canObj = findFinishingByName(finishingDatabase, canName);
       if (canObj) {
-        const toCan = Math.max(0, parentSheetsNeeded - haoIn - haoCan);
+        const toCan = Math.max(0, parentSheetsNeeded - HAO_IN - HAO_CAN);
         const areaCm2 = Pw * Ph;
         const laminationSides = 1; // Hộp mềm thường cán 1 mặt ngoài
-        const cost = areaCm2 * toCan * laminationSides * parseFloat(canObj.price);
-        tienCan = Math.max(cost, parseFloat(canObj.minPrice));
+        const cost = areaCm2 * toCan * laminationSides * safeParseNumber(canObj.price);
+        tienCan = Math.max(cost, safeParseNumber(canObj.minPrice));
         canDetail = `(${toCan.toLocaleString('vi-VN')} tờ × ${laminationSides} mặt × ${areaCm2.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
       }
     }
@@ -433,10 +417,10 @@ function HopMemCalculator() {
       : '(Không tìm thấy đơn giá gia công)';
 
     // 5. Tiền khuôn bế
-    const tienKhuonBe = parseFloat(dieCost) || 0;
+    const tienKhuonBe = safeParseNumber(dieCost);
 
     // 6. Tiền vận chuyển
-    const tienVanChuyen = parseFloat(shippingCost) || 0; 
+    const tienVanChuyen = safeParseNumber(shippingCost); 
 
     const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienGiaCong + tienKhuonBe + tienVanChuyen;
     const giaBan = giaSanXuat * markup;
@@ -574,7 +558,7 @@ function HopMemCalculator() {
               <span>Khổ giấy in (Nguyên khổ) *</span>
               {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
                 <span className="text-xs text-amber-600 font-semibold bg-amber-100 px-2 py-0.5 rounded border border-amber-200">
-                  Khổ xả: {(parseFloat(rollWidth) || 0) / rollSplit} x {parseFloat(rollCutLength) || 0} cm
+                  Khổ xả: {safeParseNumber(rollWidth) / rollSplit} x {safeParseNumber(rollCutLength)} cm
                 </span>
               )}
             </label>

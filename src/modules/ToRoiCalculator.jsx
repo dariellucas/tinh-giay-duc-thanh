@@ -1,9 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
-import { KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRODUCT_SIZES } from '../constants/pricingConstants';
+import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_GAP, HAO_IN, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES } from '../constants/pricingConstants';
 import ImpositionCanvas from '../components/viewers/ImpositionCanvas';
 import { usePricingDataContext } from '../context/PricingDataContext';
-import { findFinishingByName } from '../utils/finishingUtils';
+import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
+import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
 function ToRoiCalculator() {
   const {
@@ -50,18 +51,18 @@ function ToRoiCalculator() {
   const [generatedOrder, setGeneratedOrder] = useState('');
   const [orderCopied, setOrderCopied] = useState(false);
 
-  const MARGIN = 0.2;
+  const MARGIN = PRINT_MARGIN_CM;
 
   const { reqMax, reqMin } = useMemo(() => {
     let pw = 0, ph = 0;
     if (parentSizeIdx === '') {
       pw = 0; ph = 0;
     } else if (parentSizeIdx === PARENT_PAPER_SIZES.length) {
-      pw = parseFloat(customParentW) || 0;
-      ph = parseFloat(customParentH) || 0;
+      pw = safeParseNumber(customParentW);
+      ph = safeParseNumber(customParentH);
     } else if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      pw = (parseFloat(rollWidth) || 0) / rollSplit;
-      ph = parseFloat(rollCutLength) || 0;
+      pw = safeParseNumber(rollWidth) / rollSplit;
+      ph = safeParseNumber(rollCutLength);
     } else {
       pw = PARENT_PAPER_SIZES[parentSizeIdx].w;
       ph = PARENT_PAPER_SIZES[parentSizeIdx].h;
@@ -71,19 +72,7 @@ function ToRoiCalculator() {
 
   const validPrinters = useMemo(() => {
     if (!printerDatabase) return [];
-    return printerDatabase.filter(p => {
-      if (!p || typeof p.name !== 'string' || p.name.trim() === '') {
-        return false;
-      }
-      const normalizedName = p.name.replace(/,/g, '.');
-      const match = normalizedName.match(/(\d+(?:\.\d+)?)\s*[xX]\s*(\d+(?:\.\d+)?)/);
-      if (match) {
-        const pMax = Math.max(parseFloat(match[1]), parseFloat(match[2]));
-        const pMin = Math.min(parseFloat(match[1]), parseFloat(match[2]));
-        return pMax >= reqMax && pMin >= reqMin;
-      }
-      return true;
-    });
+    return filterPrintersBySize(printerDatabase, reqMax, reqMin);
   }, [printerDatabase, reqMax, reqMin]);
 
   useEffect(() => {
@@ -142,8 +131,8 @@ function ToRoiCalculator() {
     setError('');
     setGeneratedOrder('');
     
-    const GAP = muonSong ? 0 : 0.4;
-    const GRIPPER = muonNhip ? 0 : 1.0;
+    const GAP = muonSong ? 0 : DEFAULT_GAP_CM;
+    const GRIPPER = muonNhip ? 0 : DEFAULT_GRIPPER_CM;
     
     // ÉP BUỘC TỜ GIẤY IN LUÔN NẰM NGANG (LANDSCAPE)
     const Pw = reqMax; 
@@ -151,8 +140,8 @@ function ToRoiCalculator() {
 
     let prodW, prodH;
     if (productTypeIdx === PRODUCT_SIZES.length - 1) {
-      const cw = parseFloat(customW);
-      const ch = parseFloat(customH);
+      const cw = safeParseNumber(customW);
+      const ch = safeParseNumber(customH);
       if (isNaN(cw) || isNaN(ch) || cw <= 0 || ch <= 0) {
         setError('Vui lòng nhập kích thước sản phẩm hợp lệ.');
         return;
@@ -245,21 +234,7 @@ function ToRoiCalculator() {
 
     const soToInLyThuyet = Math.ceil(qty / bestOpt.total); 
 
-    let dynamicSpoilage = 100; // Giá trị mặc định
-    if (dinhMucDatabase && dinhMucDatabase.length > 0) {
-      const printSpoilageRules = dinhMucDatabase.filter(d => d.category === 'In');
-      for (let i = 0; i < printSpoilageRules.length; i++) {
-        const rule = printSpoilageRules[i];
-        const fromQ = parseInt(rule.fromQty) || 0;
-        const toQ = parseInt(rule.toQty) || 0;
-        const spoilVal = parseInt(rule.spoilage) || 0;
-        
-        if (soToInLyThuyet >= fromQ && soToInLyThuyet <= toQ) {
-          dynamicSpoilage = spoilVal;
-          break;
-        }
-      }
-    }
+    let dynamicSpoilage = getSpoilageByQuantity(dinhMucDatabase, soToInLyThuyet);
 
     if (printSides === 2 && impositionStyle === 'Trở khác') {
       dynamicSpoilage += 50;
@@ -274,15 +249,15 @@ function ToRoiCalculator() {
     const areaM2 = (Pw * Ph) / 10000;
     const weightPerSheetKg = (areaM2 * paperGsm) / 1000;
     const totalWeightKg = weightPerSheetKg * parentSheetsNeeded;
-    const pricePerKg = pricePerTon * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
-    const totalCostVnd = totalWeightKg * pricePerKg;
+    const pricePerKg = safeParseNumber(pricePerTon) * 1000; // Bảng giá giấy đang theo đơn vị tấn, cần quy đổi về kg.
+    const totalCostVnd = calculatePaperCost(Pw, Ph, paperGsm, parentSheetsNeeded, pricePerTon);
 
     const tienGiay = totalCostVnd;
 
     let tienXaLo = 0;
     if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
       const xaLoObj = findFinishingByName(finishingDatabase, 'xả lô');
-      tienXaLo = xaLoObj ? parseFloat(xaLoObj.minPrice) : 150000;
+      tienXaLo = xaLoObj ? safeParseNumber(xaLoObj.minPrice) : 150000;
     }
     
     let soKem = printColors;
@@ -290,7 +265,7 @@ function ToRoiCalculator() {
       soKem = printColors * 2;
     }
     const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
-    const giaKem = selectedPrinterObj ? parseFloat(selectedPrinterObj.platePrice) || 0 : 0;
+    const giaKem = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.platePrice) : 0;
     const tienKem = soKem * giaKem;
 
     let soLuotInMoiKem = soToInLyThuyet;
@@ -303,13 +278,9 @@ function ToRoiCalculator() {
     }
 
     const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000); 
-    const giaLuotCoBan = selectedPrinterObj ? parseFloat(selectedPrinterObj.runPrice) || 0 : 0;
+    const giaLuotCoBan = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.runPrice) : 0;
     const giaLuot = printColors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
     const tienIn = quaLuotMoiKem * soKem * giaLuot;
-
-    const haoIn = 30;
-    const haoCan = 20;
-    const haoGap = 20;
 
     let tienCan = 0;
     let canDetail = '';
@@ -317,11 +288,11 @@ function ToRoiCalculator() {
       const canName = lamination === 'matte' ? 'cán mờ' : 'cán bóng';
       const canObj = findFinishingByName(finishingDatabase, canName);
       if (canObj) {
-        const toCan = Math.max(0, parentSheetsNeeded - haoIn - haoCan);
+        const toCan = Math.max(0, parentSheetsNeeded - HAO_IN - HAO_CAN);
         const areaCm2 = Pw * Ph;
         const totalArea = areaCm2 * toCan * laminationSides;
-        const cost = totalArea * parseFloat(canObj.price);
-        tienCan = Math.max(cost, parseFloat(canObj.minPrice));
+        const cost = totalArea * safeParseNumber(canObj.price);
+        tienCan = Math.max(cost, safeParseNumber(canObj.minPrice));
         canDetail = `(${toCan.toLocaleString('vi-VN')} tờ × ${laminationSides} mặt × ${areaCm2.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
       }
     }
@@ -331,8 +302,8 @@ function ToRoiCalculator() {
     const xenObj = findFinishingByName(finishingDatabase, 'xén');
     if (xenObj) {
       const reams = parentSheetsNeeded / 500;
-      const cost = reams * parseFloat(xenObj.price);
-      tienXen = Math.max(cost, parseFloat(xenObj.minPrice));
+      const cost = reams * safeParseNumber(xenObj.price);
+      tienXen = Math.max(cost, safeParseNumber(xenObj.minPrice));
       xenDetail = `(${reams.toFixed(1)} ram × ${xenObj.price.toLocaleString('vi-VN')}đ)`;
     }
 
@@ -341,17 +312,17 @@ function ToRoiCalculator() {
     if (foldingLines > 0) {
       const gapObj = findFinishingByName(finishingDatabase, 'gấp vạch');
       if (gapObj) {
-        const haoCanThucTe = lamination !== 'none' ? haoCan : 0;
-        const toGap = Math.max(0, parentSheetsNeeded - haoIn - haoCanThucTe - haoGap);
+        const haoCanThucTe = lamination !== 'none' ? HAO_CAN : 0;
+        const toGap = Math.max(0, parentSheetsNeeded - HAO_IN - haoCanThucTe - HAO_GAP);
         const soSanPhamGap = toGap * bestOpt.total; // Tính ra tổng số SP
 
-        const cost = soSanPhamGap * foldingLines * parseFloat(gapObj.price);
-        tienGapVach = Math.max(cost, parseFloat(gapObj.minPrice));
+        const cost = soSanPhamGap * foldingLines * safeParseNumber(gapObj.price);
+        tienGapVach = Math.max(cost, safeParseNumber(gapObj.minPrice));
         gapDetail = `(${soSanPhamGap.toLocaleString('vi-VN')} SP × ${foldingLines} vạch × ${gapObj.price}đ)`;
       }
     }
 
-    const tienVanChuyen = parseFloat(shippingCost) || 0; 
+    const tienVanChuyen = safeParseNumber(shippingCost); 
 
     const giaSanXuat = tienGiay + tienXaLo + tienKem + tienIn + tienCan + tienXen + tienGapVach + tienVanChuyen;
     const giaBan = giaSanXuat * markup;

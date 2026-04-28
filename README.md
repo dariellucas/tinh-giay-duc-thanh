@@ -1,16 +1,11 @@
-# React + Vite
+# App Tinh Gia Duc Thanh
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+## Utility tinh gia
 
-Currently, two official plugins are available:
+- `calculatePaperCost(widthCm, heightCm, gsm, sheetsNeeded, pricePerTon)` trong `src/utils/numberUtils.js`: tinh tong tien giay tu kich thuoc cm, dinh luong g/m2, so to can dung va don gia theo tan. Ham giu dung quy doi hien co: dien tich cm2 -> m2, trong luong g -> kg, `pricePerTon * 1000` de doi don gia theo tan ve kg.
+- `getSpoilageByQuantity(dinhMucDatabase, soToInLyThuyet, category = 'In')` trong `src/utils/numberUtils.js`: tra bang dinh muc bu hao theo khoang so to in, mac dinh tra nhom `In` va fallback `100` to.
+- `filterPrintersBySize(printers, reqMax, reqMin)` trong `src/utils/finishingUtils.js`: loc may in theo kich thuoc lon/nho toi thieu, doc kich thuoc tu ten may dang `65x86`, `65 x 86` hoac dung dau `x/X/×`.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Hang so in an dung chung
 
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+`src/constants/pricingConstants.js` export cac hang so: `PRINT_MARGIN_CM`, `DEFAULT_GAP_CM`, `DEFAULT_GRIPPER_CM`, `HAO_IN`, `HAO_CAN`, `HAO_GAP`.
