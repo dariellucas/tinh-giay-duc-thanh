@@ -7,6 +7,8 @@ export const HAO_IN = 30;
 export const HAO_CAN = 20;
 export const HAO_GAP = 20;
 
+export const DEFAULT_MARKUP = 1.4;
+
 export const DEFAULT_PAPER_DATA = [
   { paperType: 'Couche', gsm: 80, price: 22.4, rolls: '62; 65; 72; 79; 86; 109' },
   { paperType: 'Couche', gsm: 100, price: 20.8, rolls: '62; 65; 72; 79; 86; 102; 109' },

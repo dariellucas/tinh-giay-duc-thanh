@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
-import { DEFAULT_GAP_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
+import { DEFAULT_GAP_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { useDebounce } from '../hooks/useDebounce';
@@ -59,7 +59,7 @@ function HopMemCalculator() {
   // --- STATES TÀI CHÍNH ---
   const [dieCost, setDieCost] = useState(0);
   const [shippingCost, setShippingCost] = useState(0);
-  const [markup, setMarkup] = useState(1.1);
+  const [markup, setMarkup] = useState(DEFAULT_MARKUP);
 
   // --- STATES KẾT QUẢ HIỂN THỊ (Tạm thời) ---
   const [isCalculated, setIsCalculated] = useState(false);

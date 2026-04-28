@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, BookOpen, Layers, Maximize, Printer, RefreshCw } from 'lucide-react';
-import { BINDING_TYPES, DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES } from '../constants/pricingConstants';
+import { BINDING_TYPES, DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import CatalogueSignatureCanvas from '../components/viewers/CatalogueSignatureCanvas';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
@@ -24,7 +24,7 @@ function CatalogueCalculator() {
   const [totalPages, setTotalPages] = useState('28');
   const [bindingType, setBindingType] = useState('ghim');
   const [isCombinedPrint, setIsCombinedPrint] = useState(true); 
-  const [markup, setMarkup] = useState(1.1);
+  const [markup, setMarkup] = useState(DEFAULT_MARKUP);
   const [orientation, setOrientation] = useState('doc');
   const [isKhoThieu, setIsKhoThieu] = useState(true); 
 

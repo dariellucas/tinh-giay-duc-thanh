@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Box, Maximize, Printer, RefreshCw, ShoppingBag, X, ZoomIn } from 'lucide-react';
-import { DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES } from '../constants/pricingConstants';
+import { DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import { Box3DViewer } from '../components/viewers/HopMemViewers';
 import { computeTuiGiayKhuonUnit, TuiGiayFlatLayoutViewer, TuiGiayImpositionViewer } from '../components/viewers/TuiGiayViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
@@ -160,7 +160,7 @@ function TuiGiayCalculator() {
   // --- STATES TÀI CHÍNH ---
 
   const [shippingCost, setShippingCost] = useState(0);
-  const [markup, setMarkup] = useState(1.1);
+  const [markup, setMarkup] = useState(DEFAULT_MARKUP);
 
   // --- STATES KẾT QUẢ HIỂN THỊ (Tạm thời) ---
   const [isCalculated, setIsCalculated] = useState(false);

@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
-import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_GAP, HAO_IN, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES } from '../constants/pricingConstants';
+import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_GAP, HAO_IN, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import ImpositionCanvas from '../components/viewers/ImpositionCanvas';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
@@ -36,7 +36,7 @@ function ToRoiCalculator() {
   const [foldingLines, setFoldingLines] = useState(0);
   const [selectedPrinter, setSelectedPrinter] = useState('');
   const [shippingCost, setShippingCost] = useState(0);
-  const [markup, setMarkup] = useState(1.1);
+  const [markup, setMarkup] = useState(DEFAULT_MARKUP);
   const [paperType, setPaperType] = useState('');
   const [paperGsm, setPaperGsm] = useState('');
   const [muonSong, setMuonSong] = useState(false);
