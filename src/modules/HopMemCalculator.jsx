@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
 import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
@@ -66,6 +66,17 @@ function HopMemCalculator() {
   const [isZoomModalOpen, setIsZoomModalOpen] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
+
+  const boxDimensionsRef = useRef(null);
+  const quantityRef = useRef(null);
+  const paperTypeRef = useRef(null);
+  const paperGsmRef = useRef(null);
+  const parentSizeRef = useRef(null);
+  const customParentSizeRef = useRef(null);
+  const rollCutLengthRef = useRef(null);
+  const layoutRef = useRef(null);
+  const selectedPrinterRef = useRef(null);
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
@@ -309,19 +320,111 @@ function HopMemCalculator() {
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
   const hasValidDimensions = safeParseNumber(boxWidth) > 0 && safeParseNumber(boxDepth) > 0 && safeParseNumber(boxHeight) > 0;
 
+  const fieldRefs = {
+    boxDimensions: boxDimensionsRef,
+    quantity: quantityRef,
+    paperType: paperTypeRef,
+    paperGsm: paperGsmRef,
+    parentSize: parentSizeRef,
+    customParentSize: customParentSizeRef,
+    rollCutLength: rollCutLengthRef,
+    layout: layoutRef,
+    selectedPrinter: selectedPrinterRef,
+  };
+
+  const fieldErrorOrder = [
+    'boxDimensions',
+    'quantity',
+    'paperType',
+    'paperGsm',
+    'parentSize',
+    'customParentSize',
+    'rollCutLength',
+    'layout',
+    'selectedPrinter',
+  ];
+
+  const scrollToFirstFieldError = (errors) => {
+    const firstErrorKey = fieldErrorOrder.find((key) => errors[key]);
+    const target = firstErrorKey ? fieldRefs[firstErrorKey]?.current : null;
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    }
+  };
+
+  const applyValidationErrors = (errors, summaryMessage) => {
+    setFieldErrors(errors);
+    setError(summaryMessage);
+    setResult(null);
+    setIsCalculated(false);
+    requestAnimationFrame(() => scrollToFirstFieldError(errors));
+  };
+
+  const clearFieldError = (...keys) => {
+    setFieldErrors((prev) => {
+      if (!keys.some((key) => prev[key])) return prev;
+      const next = { ...prev };
+      keys.forEach((key) => {
+        delete next[key];
+      });
+      return next;
+    });
+  };
+
+  const hasFieldError = (...keys) => keys.some((key) => fieldErrors[key]);
+  const fieldClass = (baseClass, ...keys) => (
+    hasFieldError(...keys)
+      ? `${baseClass} border-red-500 ring-1 ring-red-500 focus:ring-red-500 bg-red-50`
+      : baseClass
+  );
+  const renderFieldError = (key) => fieldErrors[key] ? (
+    <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
+      <AlertCircle size={14} className="mt-0.5 shrink-0" />
+      <span>{fieldErrors[key]}</span>
+    </p>
+  ) : null;
+
   const handleCalculate = () => {
-    if (!boxWidth || !boxDepth || !boxHeight || !quantity || !paperType || !paperGsm || parentSizeIdx === '' || !selectedPrinter) {
-      setError('Vui lòng điền đầy đủ thông tin kích thước, số lượng, giấy và máy in.');
-      setResult(null);
-      setIsCalculated(false);
-      return;
+    const qty = parseInt(quantity);
+    const nextFieldErrors = {};
+
+    if (safeParseNumber(boxWidth) <= 0 || safeParseNumber(boxDepth) <= 0 || safeParseNumber(boxHeight) <= 0) {
+      nextFieldErrors.boxDimensions = 'Nhập đủ 3 chiều hộp và mỗi chiều phải lớn hơn 0.';
+    }
+    if (!quantity || isNaN(qty) || qty <= 0) {
+      nextFieldErrors.quantity = 'Số lượng hộp phải lớn hơn 0.';
+    }
+    if (!paperType) {
+      nextFieldErrors.paperType = 'Chọn loại giấy.';
+    }
+    if (!paperGsm) {
+      nextFieldErrors.paperGsm = 'Chọn định lượng giấy.';
+    }
+    if ((parseInt(cols) || 0) <= 0 || (parseInt(rows) || 0) <= 0) {
+      nextFieldErrors.layout = 'Số bát X và Y phải lớn hơn 0.';
+    }
+    if (parentSizeIdx === '') {
+      nextFieldErrors.parentSize = 'Chọn khổ giấy in.';
+    }
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length && (safeParseNumber(customParentW) <= 0 || safeParseNumber(customParentH) <= 0)) {
+      nextFieldErrors.customParentSize = 'Nhập đủ ngang và cao cho khổ giấy tùy chọn.';
+    }
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      if (!rollWidth || safeParseNumber(rollWidth) <= 0) {
+        nextFieldErrors.parentSize = 'Loại giấy/định lượng này chưa có khổ lô hợp lệ.';
+      }
+      if (safeParseNumber(rollCutLength) <= 0) {
+        nextFieldErrors.rollCutLength = 'Nhập chiều dài xả lớn hơn 0.';
+      }
+    }
+    if (!selectedPrinter) {
+      nextFieldErrors.selectedPrinter = 'Chọn máy in phù hợp.';
+    } else if (validPrinters.length > 0 && !validPrinters.find((printer) => printer.id === selectedPrinter)) {
+      nextFieldErrors.selectedPrinter = 'Máy in đã chọn không phù hợp với khổ giấy hiện tại.';
     }
 
-    const qty = parseInt(quantity);
-    if (isNaN(qty) || qty <= 0) {
-      setError('Số lượng không hợp lệ.');
-      setResult(null);
-      setIsCalculated(false);
+    if (Object.keys(nextFieldErrors).length > 0) {
+      applyValidationErrors(nextFieldErrors, 'Vui lòng kiểm tra các trường đang được đánh dấu đỏ.');
       return;
     }
 
@@ -348,12 +451,17 @@ function HopMemCalculator() {
       const why = reqMax > safeMax
         ? `chiều dài khuôn (${reqMax.toFixed(1)} cm) vượt chiều dài an toàn tờ (${safeMax.toFixed(1)} cm)`
         : `chiều rộng khuôn (${reqMin.toFixed(1)} cm) vượt chiều rộng an toàn tờ (${safeMin.toFixed(1)} cm${!muonNhip ? ', đã trừ nhíp 1 cm' : ''})`;
-      setError(`Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.`);
-      setResult(null);
-      setIsCalculated(false);
+      applyValidationErrors(
+        {
+          parentSize: `Khổ giấy hiện tại không đủ vùng in an toàn: ${why}.`,
+          layout: 'Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.',
+        },
+        `Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.`,
+      );
       return;
     }
 
+    setFieldErrors({});
     setError('');
 
     const itemsPerSheet = cols * rows;
@@ -558,31 +666,36 @@ function HopMemCalculator() {
             <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={productName} onChange={(e) => setProductName(e.target.value)} />
           </div>
           
-          <div className="bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2">
+          <div
+            ref={boxDimensionsRef}
+            className={fieldClass('bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2', 'boxDimensions')}
+          >
             <label className="text-xs font-bold text-orange-800 uppercase tracking-wider block">Kích thước thành phẩm (cm)</label>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Ngang (X)</label>
-                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 10" value={boxWidth} onChange={(e) => setBoxWidth(e.target.value)}/>
+                <input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'boxDimensions')} placeholder="VD: 10" value={boxWidth} onChange={(e) => { setBoxWidth(e.target.value); clearFieldError('boxDimensions'); }}/>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Hông (Y)</label>
-                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 5" value={boxDepth} onChange={(e) => setBoxDepth(e.target.value)}/>
+                <input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'boxDimensions')} placeholder="VD: 5" value={boxDepth} onChange={(e) => { setBoxDepth(e.target.value); clearFieldError('boxDimensions'); }}/>
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Cao (Z)</label>
-                <input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" placeholder="VD: 15" value={boxHeight} onChange={(e) => setBoxHeight(e.target.value)}/>
+                <input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'boxDimensions')} placeholder="VD: 15" value={boxHeight} onChange={(e) => { setBoxHeight(e.target.value); clearFieldError('boxDimensions'); }}/>
               </div>
             </div>
+            {renderFieldError('boxDimensions')}
             
             {/* COMPONENT 3D VIEWER */}
             <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div ref={quantityRef} className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
-              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              <input type="number" className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700', 'quantity')} value={quantity} onChange={(e) => { setQuantity(e.target.value); clearFieldError('quantity'); }} />
+              {renderFieldError('quantity')}
             </div>
             <div className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Loại hộp</label>
@@ -607,37 +720,40 @@ function HopMemCalculator() {
           
 
           <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100">
-            <div className="space-y-1">
+            <div ref={paperTypeRef} className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); }}>
+              <select className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm', 'paperType')} value={paperType} onChange={(e) => { setPaperType(e.target.value); setPaperGsm(''); clearFieldError('paperType', 'paperGsm', 'parentSize'); }}>
                 {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
               </select>
+              {renderFieldError('paperType')}
             </div>
-            <div className="space-y-1">
+            <div ref={paperGsmRef} className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Định lượng *</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperGsm} onChange={(e) => setPaperGsm(e.target.value === '' ? '' : Number(e.target.value))} disabled={!paperType}>
+              <select className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm', 'paperGsm')} value={paperGsm} onChange={(e) => { setPaperGsm(e.target.value === '' ? '' : Number(e.target.value)); clearFieldError('paperGsm', 'parentSize'); }} disabled={!paperType}>
                 <option value="" disabled hidden>Chọn Đ.Lượng</option>
                 {availableGsms.map(gsm => <option key={gsm} value={gsm}>{gsm}</option>)}
               </select>
+              {renderFieldError('paperGsm')}
             </div>
           </div>
 
 
-          <div className="grid grid-cols-2 gap-3">
+          <div ref={layoutRef} className="grid grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát X</label>
-              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={cols} onChange={(e) => setCols(e.target.value)}/>
+              <input type="number" min="1" className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm', 'layout')} value={cols} onChange={(e) => { setCols(e.target.value); clearFieldError('layout'); }}/>
             </div>
             <div className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Số bát Y</label>
-              <input type="number" min="1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm" value={rows} onChange={(e) => setRows(e.target.value)}/>
+              <input type="number" min="1" className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm', 'layout')} value={rows} onChange={(e) => { setRows(e.target.value); clearFieldError('layout'); }}/>
             </div>
+            {fieldErrors.layout && <div className="col-span-2">{renderFieldError('layout')}</div>}
           </div>
 
           {(boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && (
             <div className="pt-1">
               <label className="flex items-center space-x-1.5 cursor-pointer group w-fit">
-                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={daoTaiDan} onChange={(e) => setDaoTaiDan(e.target.checked)} />
+                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={daoTaiDan} onChange={(e) => { setDaoTaiDan(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
                 <span className="text-sm font-medium text-slate-700">Đảo tai dán</span>
               </label>
             </div>
@@ -655,7 +771,7 @@ function HopMemCalculator() {
 
 
           {/* CHỌN KHỔ GIẤY IN HỘP MỀM */}
-          <div className="space-y-2 pt-1 border-t border-slate-100">
+          <div ref={parentSizeRef} className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700 flex justify-between items-center">
               <span>Khổ giấy in (Nguyên khổ) *</span>
               {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
@@ -664,7 +780,7 @@ function HopMemCalculator() {
                 </span>
               )}
             </label>
-            <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
+            <select className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm', 'parentSize')} value={parentSizeIdx} onChange={(e) => { setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value)); clearFieldError('parentSize', 'customParentSize', 'rollCutLength', 'selectedPrinter'); }}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
               {PARENT_PAPER_SIZES.map((size, idx) => (
                 validPaperSizeSet.has(idx)
@@ -674,12 +790,17 @@ function HopMemCalculator() {
               <option value={PARENT_PAPER_SIZES.length}>Tùy chọn...</option>
               <option value={PARENT_PAPER_SIZES.length + 1}>Xả lô (Từ cuộn)...</option>
             </select>
+            {renderFieldError('parentSize')}
           </div>
           
           {parentSizeIdx === PARENT_PAPER_SIZES.length && (
-            <div className="grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 mt-2">
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentW} onChange={(e) => setCustomParentW(e.target.value)}/></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentH} onChange={(e) => setCustomParentH(e.target.value)}/></div>
+            <div
+              ref={customParentSizeRef}
+              className={fieldClass('grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 mt-2', 'customParentSize')}
+            >
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentW} onChange={(e) => { setCustomParentW(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentH} onChange={(e) => { setCustomParentH(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
+              {fieldErrors.customParentSize && <div className="col-span-2">{renderFieldError('customParentSize')}</div>}
             </div>
           )}
           {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
@@ -687,7 +808,7 @@ function HopMemCalculator() {
               <div className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Khổ lô (cm)</label>
                 {availableRolls.length > 0 ? (
-                  <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm font-semibold text-amber-900" value={rollWidth} onChange={(e) => setRollWidth(e.target.value)}>
+                  <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm font-semibold text-amber-900" value={rollWidth} onChange={(e) => { setRollWidth(e.target.value); clearFieldError('parentSize', 'selectedPrinter'); }}>
                     {availableRolls.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 ) : (
@@ -696,24 +817,25 @@ function HopMemCalculator() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Chia lô</label>
-                <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm" value={rollSplit} onChange={(e) => setRollSplit(Number(e.target.value))}>
+                <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm" value={rollSplit} onChange={(e) => { setRollSplit(Number(e.target.value)); clearFieldError('parentSize', 'selectedPrinter'); }}>
                   {[1, 2, 3].map(v => <option key={v} value={v}>Chia {v}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
+              <div ref={rollCutLengthRef} className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Chiều dài xả</label>
-                <input type="number" step="0.1" className="w-full p-2 border border-amber-300 rounded outline-none text-sm" placeholder="VD: 30" value={rollCutLength} onChange={(e) => setRollCutLength(e.target.value)}/>
+                <input type="number" step="0.1" className={fieldClass('w-full p-2 border border-amber-300 rounded outline-none text-sm', 'rollCutLength')} placeholder="VD: 30" value={rollCutLength} onChange={(e) => { setRollCutLength(e.target.value); clearFieldError('rollCutLength', 'parentSize', 'selectedPrinter'); }}/>
+                {renderFieldError('rollCutLength')}
               </div>
             </div>
           )}
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonSong} onChange={(e) => setMuonSong(e.target.checked)} />
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonSong} onChange={(e) => { setMuonSong(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
               <span className="text-sm font-medium text-slate-700">Mượn sông</span>
             </label>
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => setMuonNhip(e.target.checked)} />
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => { setMuonNhip(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
               <span className="text-sm font-medium text-slate-700">Mượn nhíp</span>
             </label>
             <label className="flex items-center space-x-1.5 cursor-pointer group">
@@ -733,12 +855,13 @@ function HopMemCalculator() {
                 {[1, 2, 3, 4, 5].map(c => <option key={c} value={c}>{c} màu</option>)}
               </select>
             </div>
-            <div className="space-y-1">
+            <div ref={selectedPrinterRef} className="space-y-1">
               <label className="text-xs font-medium text-slate-600">Chọn máy in</label>
-              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={selectedPrinter} onChange={(e) => setSelectedPrinter(e.target.value)}>
+              <select className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm', 'selectedPrinter')} value={selectedPrinter} onChange={(e) => { setSelectedPrinter(e.target.value); clearFieldError('selectedPrinter'); }}>
                 <option value="">Chọn máy...</option>
                 {validPrinters.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
+              {renderFieldError('selectedPrinter')}
             </div>
           </div>
         </div>
@@ -829,7 +952,7 @@ function HopMemCalculator() {
       {/* KHU VỰC PHẢI: KẾT QUẢ & BẢN VẼ */}
       <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6">
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shrink-0">
+          <div className="sticky top-0 z-20 bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shrink-0 shadow-sm">
             <AlertCircle size={24} />
             <span className="font-medium">{error}</span>
           </div>

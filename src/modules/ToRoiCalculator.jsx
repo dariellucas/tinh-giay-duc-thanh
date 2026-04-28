@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, Check, Copy, FileText, Layout, Maximize, Printer, RefreshCw, Settings, X } from 'lucide-react';
 import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_GAP, HAO_IN, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import ImpositionCanvas from '../components/viewers/ImpositionCanvas';
@@ -44,12 +44,23 @@ function ToRoiCalculator() {
   const [allowMixed, setAllowMixed] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState({});
   const [isOrderModalOpen, setIsOrderModalOpen] = useState(false);
   const [orderForm, setOrderForm] = useState({
     orderCode: '', supplier: '', paperType: '', deliveryDate: '', deliveryAddress: '', notes: ''
   });
   const [generatedOrder, setGeneratedOrder] = useState('');
   const [orderCopied, setOrderCopied] = useState(false);
+
+  const quantityRef = useRef(null);
+  const productSizeRef = useRef(null);
+  const customProductSizeRef = useRef(null);
+  const paperTypeRef = useRef(null);
+  const paperGsmRef = useRef(null);
+  const parentSizeRef = useRef(null);
+  const customParentSizeRef = useRef(null);
+  const rollCutLengthRef = useRef(null);
+  const selectedPrinterRef = useRef(null);
 
   const MARGIN = PRINT_MARGIN_CM;
 
@@ -107,6 +118,55 @@ function ToRoiCalculator() {
     }
   }, [availableRolls, rollWidth]);
 
+  const fieldRefs = {
+    quantity: quantityRef,
+    productSize: productSizeRef,
+    customProductSize: customProductSizeRef,
+    paperType: paperTypeRef,
+    paperGsm: paperGsmRef,
+    parentSize: parentSizeRef,
+    customParentSize: customParentSizeRef,
+    rollCutLength: rollCutLengthRef,
+    selectedPrinter: selectedPrinterRef,
+  };
+
+  const fieldErrorOrder = ['quantity', 'productSize', 'customProductSize', 'paperType', 'paperGsm', 'parentSize', 'customParentSize', 'rollCutLength', 'selectedPrinter'];
+
+  const scrollToFirstFieldError = (errors) => {
+    const firstErrorKey = fieldErrorOrder.find((key) => errors[key]);
+    const target = firstErrorKey ? fieldRefs[firstErrorKey]?.current : null;
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  const applyValidationErrors = (errors, summaryMessage) => {
+    setFieldErrors(errors);
+    setError(summaryMessage);
+    setResult(null);
+    requestAnimationFrame(() => scrollToFirstFieldError(errors));
+  };
+
+  const clearFieldError = (...keys) => {
+    setFieldErrors((prev) => {
+      if (!keys.some((key) => prev[key])) return prev;
+      const next = { ...prev };
+      keys.forEach((key) => delete next[key]);
+      return next;
+    });
+  };
+
+  const hasFieldError = (...keys) => keys.some((key) => fieldErrors[key]);
+  const fieldClass = (baseClass, ...keys) => (
+    hasFieldError(...keys)
+      ? `${baseClass} border-red-500 ring-1 ring-red-500 focus:ring-red-500 bg-red-50`
+      : baseClass
+  );
+  const renderFieldError = (key) => fieldErrors[key] ? (
+    <p className="mt-1 flex items-start gap-1.5 text-xs font-medium text-red-600">
+      <AlertCircle size={14} className="mt-0.5 shrink-0" />
+      <span>{fieldErrors[key]}</span>
+    </p>
+  ) : null;
+
   const calculateImposition = (e) => {
     const isManualClick = e && e.type === 'click';
 
@@ -115,19 +175,43 @@ function ToRoiCalculator() {
       return;
     }
 
-    if (productTypeIdx === '' || quantity === '' || parentSizeIdx === '' || paperType === '' || paperGsm === '') {
-      if (isManualClick) setError('Vui lòng chọn đầy đủ Khổ SP, Số lượng in, Loại giấy và Khổ giấy in.');
+    const qty = parseInt(quantity);
+    const nextFieldErrors = {};
+
+    if (quantity === '' || isNaN(qty) || qty <= 0) nextFieldErrors.quantity = 'Số lượng in phải lớn hơn 0.';
+    if (productTypeIdx === '') nextFieldErrors.productSize = 'Chọn khổ sản phẩm.';
+    if (productTypeIdx === PRODUCT_SIZES.length - 1 && (safeParseNumber(customW) <= 0 || safeParseNumber(customH) <= 0)) {
+      nextFieldErrors.customProductSize = 'Nhập đủ ngang và cao cho khổ sản phẩm tùy chọn.';
+    }
+    if (paperType === '') nextFieldErrors.paperType = 'Chọn loại giấy.';
+    if (paperGsm === '') nextFieldErrors.paperGsm = 'Chọn định lượng giấy.';
+    if (parentSizeIdx === '') nextFieldErrors.parentSize = 'Chọn khổ giấy in.';
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length && (safeParseNumber(customParentW) <= 0 || safeParseNumber(customParentH) <= 0)) {
+      nextFieldErrors.customParentSize = 'Nhập đủ ngang và cao cho khổ giấy tùy chọn.';
+    }
+    if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
+      if (!rollWidth || safeParseNumber(rollWidth) <= 0) nextFieldErrors.parentSize = 'Loại giấy/định lượng này chưa có khổ lô hợp lệ.';
+      if (safeParseNumber(rollCutLength) <= 0) nextFieldErrors.rollCutLength = 'Nhập chiều dài xả lớn hơn 0.';
+    }
+
+    if (Object.keys(nextFieldErrors).length > 0) {
+      if (isManualClick) applyValidationErrors(nextFieldErrors, 'Vui lòng kiểm tra các trường đang được đánh dấu đỏ.');
       else setError('');
       setResult(null);
       return;
     }
 
     if (validPrinters.length === 0 || !selectedPrinter) {
-      setError(`Kích thước giấy in (${reqMin}x${reqMax}) quá lớn. Không có máy in nào phù hợp!`);
-      setResult(null);
+      const message = `Kích thước giấy in (${reqMin}x${reqMax}) quá lớn. Không có máy in nào phù hợp!`;
+      if (isManualClick) applyValidationErrors({ selectedPrinter: message }, message);
+      else {
+        setError(message);
+        setResult(null);
+      }
       return;
     }
 
+    setFieldErrors({});
     setError('');
     setGeneratedOrder('');
     
@@ -142,10 +226,6 @@ function ToRoiCalculator() {
     if (productTypeIdx === PRODUCT_SIZES.length - 1) {
       const cw = safeParseNumber(customW);
       const ch = safeParseNumber(customH);
-      if (isNaN(cw) || isNaN(ch) || cw <= 0 || ch <= 0) {
-        setError('Vui lòng nhập kích thước sản phẩm hợp lệ.');
-        return;
-      }
       prodW = Math.max(cw, ch);
       prodH = Math.min(cw, ch);
     } else {
@@ -156,12 +236,6 @@ function ToRoiCalculator() {
         prodW = PRODUCT_SIZES[productTypeIdx].w;
         prodH = PRODUCT_SIZES[productTypeIdx].h;
       }
-    }
-
-    const qty = parseInt(quantity);
-    if (isNaN(qty) || qty <= 0) {
-      setError('Vui lòng nhập số lượng sản phẩm hợp lệ.');
-      return;
     }
 
     const isTroLat = printSides === 2 && impositionStyle === 'Trở lật';
@@ -227,8 +301,12 @@ function ToRoiCalculator() {
     });
 
     if (bestOpt.total === 0) {
-      setError('Sản phẩm quá lớn, không thể xếp vừa khổ giấy này (tính cả lề, sông và nhíp).');
-      setResult(null);
+      const message = 'Sản phẩm quá lớn, không thể xếp vừa khổ giấy này (tính cả lề, sông và nhíp).';
+      if (isManualClick) applyValidationErrors({ productSize: message, parentSize: 'Chọn khổ giấy lớn hơn hoặc bật Mượn nhíp/Mượn sông.' }, message);
+      else {
+        setError(message);
+        setResult(null);
+      }
       return;
     }
 
@@ -425,19 +503,21 @@ function ToRoiCalculator() {
             <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" placeholder="VD: Tờ rơi khai trương..." value={productName} onChange={(e) => setProductName(e.target.value)} />
           </div>
           <div className="grid grid-cols-2 gap-4">
-            <div className="space-y-2">
+            <div ref={quantityRef} className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Số lượng in *</label>
-              <input type="number" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-blue-700" value={quantity} onChange={(e) => setQuantity(e.target.value)} />
+              <input type="number" className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none font-semibold text-blue-700', 'quantity')} value={quantity} onChange={(e) => { setQuantity(e.target.value); clearFieldError('quantity'); }} />
+              {renderFieldError('quantity')}
             </div>
-            <div className="space-y-2">
+            <div ref={productSizeRef} className="space-y-2">
               <label className="text-sm font-medium text-slate-700">Khổ SP *</label>
-              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" value={productTypeIdx} onChange={(e) => setProductTypeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
+              <select className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none', 'productSize')} value={productTypeIdx} onChange={(e) => { setProductTypeIdx(e.target.value === '' ? '' : parseInt(e.target.value)); clearFieldError('productSize', 'customProductSize'); }}>
                 <option value="" disabled hidden>Chọn khổ SP...</option>
                 {PRODUCT_SIZES.map((size, idx) => {
                   let label = size.label; if (isKhoThieu && KHO_THIEU_SIZES[idx]) label = KHO_THIEU_SIZES[idx].label;
                   return <option key={idx} value={idx}>{label}</option>
                 })}
               </select>
+              {renderFieldError('productSize')}
             </div>
           </div>
           {productTypeIdx !== '' && productTypeIdx !== PRODUCT_SIZES.length - 1 && (
@@ -449,9 +529,10 @@ function ToRoiCalculator() {
             </div>
           )}
           {productTypeIdx === PRODUCT_SIZES.length - 1 && (
-            <div className="grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100">
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customW} onChange={(e) => setCustomW(e.target.value)}/></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customH} onChange={(e) => setCustomH(e.target.value)}/></div>
+            <div ref={customProductSizeRef} className={fieldClass('grid grid-cols-2 gap-4 bg-blue-50 p-3 rounded-lg border border-blue-100', 'customProductSize')}>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customProductSize')} value={customW} onChange={(e) => { setCustomW(e.target.value); clearFieldError('customProductSize', 'productSize'); }}/></div>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customProductSize')} value={customH} onChange={(e) => { setCustomH(e.target.value); clearFieldError('customProductSize', 'productSize'); }}/></div>
+              {fieldErrors.customProductSize && <div className="col-span-2">{renderFieldError('customProductSize')}</div>}
             </div>
           )}
         </div>
@@ -468,26 +549,28 @@ function ToRoiCalculator() {
             <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 text-center text-sm text-slate-500 animate-pulse">Đang tải bảng giá...</div>
           ) : (
             <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1">
+              <div ref={paperTypeRef} className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Loại giấy *</label>
-                <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperType} onChange={(e) => { const newType = e.target.value; setPaperType(newType); setPaperGsm(''); }}>
+                <select className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm', 'paperType')} value={paperType} onChange={(e) => { const newType = e.target.value; setPaperType(newType); setPaperGsm(''); clearFieldError('paperType', 'paperGsm', 'parentSize'); }}>
                   <option value="" disabled hidden>Chọn loại giấy...</option>
                   {availablePaperTypes.map(type => <option key={type} value={type}>{type}</option>)}
                 </select>
+                {renderFieldError('paperType')}
               </div>
-              <div className="space-y-1">
+              <div ref={paperGsmRef} className="space-y-1">
                 <label className="text-xs font-medium text-slate-600">Định lượng *</label>
-                <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={paperGsm} onChange={(e) => setPaperGsm(e.target.value === '' ? '' : Number(e.target.value))} disabled={!paperType}>
+                <select className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm', 'paperGsm')} value={paperGsm} onChange={(e) => { setPaperGsm(e.target.value === '' ? '' : Number(e.target.value)); clearFieldError('paperGsm', 'parentSize'); }} disabled={!paperType}>
                   <option value="" disabled hidden>Chọn định lượng...</option>
                   {availableGsms.map(gsm => <option key={gsm} value={gsm}>{gsm}</option>)}
                 </select>
+                {renderFieldError('paperGsm')}
               </div>
             </div>
           )}
 
 
           {/* CHỌN KHỔ GIẤY IN TỜ RƠI */}
-          <div className="space-y-2 pt-2 border-t border-slate-100">
+          <div ref={parentSizeRef} className="space-y-2 pt-2 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700 flex justify-between">
               <span>Khổ giấy in (Nguyên khổ) *</span>
               {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && reqMax > 0 && (
@@ -496,17 +579,19 @@ function ToRoiCalculator() {
                 </span>
               )}
             </label>
-            <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
+            <select className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm', 'parentSize')} value={parentSizeIdx} onChange={(e) => { setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value)); clearFieldError('parentSize', 'customParentSize', 'rollCutLength', 'selectedPrinter'); }}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
               {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
               <option value={PARENT_PAPER_SIZES.length}>Tùy chọn...</option>
               <option value={PARENT_PAPER_SIZES.length + 1}>Xả lô (Từ cuộn)...</option>
             </select>
+            {renderFieldError('parentSize')}
           </div>
           {parentSizeIdx === PARENT_PAPER_SIZES.length && (
-            <div className="grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100">
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentW} onChange={(e) => setCustomParentW(e.target.value)}/></div>
-              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className="w-full p-2 border border-slate-300 rounded outline-none" value={customParentH} onChange={(e) => setCustomParentH(e.target.value)}/></div>
+            <div ref={customParentSizeRef} className={fieldClass('grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100', 'customParentSize')}>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentW} onChange={(e) => { setCustomParentW(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
+              <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentH} onChange={(e) => { setCustomParentH(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
+              {fieldErrors.customParentSize && <div className="col-span-2">{renderFieldError('customParentSize')}</div>}
             </div>
           )}
           {parentSizeIdx === PARENT_PAPER_SIZES.length + 1 && (
@@ -514,7 +599,7 @@ function ToRoiCalculator() {
               <div className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Khổ lô (cm)</label>
                 {availableRolls.length > 0 ? (
-                  <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm font-semibold text-amber-900" value={rollWidth} onChange={(e) => setRollWidth(e.target.value)}>
+                  <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm font-semibold text-amber-900" value={rollWidth} onChange={(e) => { setRollWidth(e.target.value); clearFieldError('parentSize', 'selectedPrinter'); }}>
                     {availableRolls.map(r => <option key={r} value={r}>{r}</option>)}
                   </select>
                 ) : (
@@ -523,23 +608,24 @@ function ToRoiCalculator() {
               </div>
               <div className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Chia lô</label>
-                <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm" value={rollSplit} onChange={(e) => setRollSplit(Number(e.target.value))}>
+                <select className="w-full p-2 bg-white border border-amber-300 rounded outline-none text-sm" value={rollSplit} onChange={(e) => { setRollSplit(Number(e.target.value)); clearFieldError('parentSize', 'selectedPrinter'); }}>
                   {[1, 2, 3].map(v => <option key={v} value={v}>Chia {v}</option>)}
                 </select>
               </div>
-              <div className="space-y-1">
+              <div ref={rollCutLengthRef} className="space-y-1">
                 <label className="text-xs font-bold text-amber-800">Chiều dài xả</label>
-                <input type="number" step="0.1" className="w-full p-2 border border-amber-300 rounded outline-none text-sm" placeholder="VD: 30" value={rollCutLength} onChange={(e) => setRollCutLength(e.target.value)}/>
+                <input type="number" step="0.1" className={fieldClass('w-full p-2 border border-amber-300 rounded outline-none text-sm', 'rollCutLength')} placeholder="VD: 30" value={rollCutLength} onChange={(e) => { setRollCutLength(e.target.value); clearFieldError('rollCutLength', 'parentSize', 'selectedPrinter'); }}/>
+                {renderFieldError('rollCutLength')}
               </div>
             </div>
           )}
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-3 mt-1 border-t border-slate-100">
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" checked={muonSong} onChange={(e) => setMuonSong(e.target.checked)} />
+              <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" checked={muonSong} onChange={(e) => { setMuonSong(e.target.checked); clearFieldError('productSize', 'parentSize'); }} />
               <span className="text-sm font-medium text-slate-700">Mượn sông</span>
             </label>
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" checked={muonNhip} onChange={(e) => setMuonNhip(e.target.checked)} />
+              <input type="checkbox" className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500" checked={muonNhip} onChange={(e) => { setMuonNhip(e.target.checked); clearFieldError('productSize', 'parentSize'); }} />
               <span className="text-sm font-medium text-slate-700">Mượn nhíp</span>
             </label>
             <label className="flex items-center space-x-1.5 cursor-pointer group">
@@ -582,12 +668,12 @@ function ToRoiCalculator() {
               )}
             </div>
           </div>
-          <div className="space-y-1 pt-1">
+          <div ref={selectedPrinterRef} className="space-y-1 pt-1">
             <label className="text-xs font-medium text-slate-600">Chọn máy in</label>
             <select 
-              className={`w-full p-2 bg-slate-50 border rounded outline-none text-sm font-medium ${validPrinters.length === 0 ? 'border-red-300 text-red-600' : 'border-slate-300 text-blue-700'}`} 
+              className={fieldClass(`w-full p-2 bg-slate-50 border rounded outline-none text-sm font-medium ${validPrinters.length === 0 ? 'border-red-300 text-red-600' : 'border-slate-300 text-blue-700'}`, 'selectedPrinter')} 
               value={selectedPrinter} 
-              onChange={(e) => setSelectedPrinter(e.target.value)}
+              onChange={(e) => { setSelectedPrinter(e.target.value); clearFieldError('selectedPrinter'); }}
               disabled={validPrinters.length === 0}
             >
               {validPrinters.length > 0 ? (
@@ -601,6 +687,7 @@ function ToRoiCalculator() {
             {validPrinters.length === 0 && (
               <p className="text-[11px] text-red-500 mt-1 font-medium">Khổ giấy in ({reqMin}x{reqMax}) lớn hơn tất cả máy in hiện có!</p>
             )}
+            {renderFieldError('selectedPrinter')}
           </div>
         </div>
 
@@ -659,7 +746,7 @@ function ToRoiCalculator() {
       {/* KHU VỰC PHẢI */}
       <div className="xl:col-span-9 flex flex-col space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full xl:pr-2 xl:pb-6"> 
         {error ? (
-          <div className="bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
+          <div className="sticky top-0 z-20 bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shadow-sm"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
         ) : result ? (
           <>
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
