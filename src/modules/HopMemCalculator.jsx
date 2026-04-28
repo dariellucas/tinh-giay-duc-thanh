@@ -1,10 +1,10 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
-import { DEFAULT_GAP_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
+import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { useDebounce } from '../hooks/useDebounce';
-import { calculateEmbossCost, calculateFoilCost, findFinishingByName } from '../utils/finishingUtils';
+import { calculateEmbossCost, calculateFoilCost, filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
 function HopMemCalculator() {
@@ -90,8 +90,11 @@ function HopMemCalculator() {
     }
   }, [availableRolls, rollWidth]);
 
+  const GRIPPER_CM = DEFAULT_GRIPPER_CM;
+  const SAFE_MARGIN_CM = 0.3;
+
   const debouncedAutoFitInputs = useDebounce(
-    [boxType, boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, daoTaiDan],
+    [boxType, boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, daoTaiDan, muonNhip],
     300,
   );
 
@@ -146,7 +149,7 @@ function HopMemCalculator() {
 
   // --- THÊM MỚI: TỰ ĐỘNG TÍNH TOÁN SỐ BÁT IN KHI THAY ĐỔI KÍCH THƯỚC HOẶC KHỔ GIẤY ---
   useEffect(() => {
-    const [dBoxType, dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dDaoTaiDan] = debouncedAutoFitInputs;
+    const [dBoxType, dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dDaoTaiDan, dMuonNhip] = debouncedAutoFitInputs;
     const X = safeParseNumber(dBoxWidth);
     const Y = safeParseNumber(dBoxDepth);
     const Z = safeParseNumber(dBoxHeight);
@@ -212,9 +215,13 @@ function HopMemCalculator() {
     };
 
     const tryFit = (paperW, paperH) => {
-      const r = getMaxRows(paperH);
+      const gripper = dMuonNhip ? 0 : GRIPPER_CM;
+      const safeW = paperW - SAFE_MARGIN_CM * 2 - (paperW <= paperH ? gripper : 0);
+      const safeH = paperH - SAFE_MARGIN_CM * 2 - (paperH < paperW ? gripper : 0);
+      if (safeW <= 0 || safeH <= 0) return { c: 0, r: 0, total: 0 };
+      const r = getMaxRows(safeH);
       if (r === 0) return { c: 0, r: 0, total: 0 };
-      const c = getMaxCols(paperW, r);
+      const c = getMaxCols(safeW, r);
       return { c, r, total: c * r };
     };
 
@@ -247,6 +254,57 @@ function HopMemCalculator() {
     }
     return { w: Pw, h: Ph };
   }, [parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength]);
+
+  // Khổ giấy hợp lệ = vùng in an toàn chứa được ít nhất 1 bát hộp.
+  const validPaperSizeSet = useMemo(() => {
+    const valid = new Set();
+    const X = safeParseNumber(boxWidth);
+    const Y = safeParseNumber(boxDepth);
+    const Z = safeParseNumber(boxHeight);
+    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
+
+    if (X <= 0 || Y <= 0 || Z <= 0 || !geom) {
+      PARENT_PAPER_SIZES.forEach((_, idx) => valid.add(idx));
+      return valid;
+    }
+
+    const reqMax = Math.max(geom.maxX - geom.minX, geom.maxY - geom.minY);
+    const reqMin = Math.min(geom.maxX - geom.minX, geom.maxY - geom.minY);
+
+    PARENT_PAPER_SIZES.forEach((size, idx) => {
+      const pMax = Math.max(size.w, size.h);
+      const pMin = Math.min(size.w, size.h);
+      const safeMax = pMax - SAFE_MARGIN_CM * 2;
+      const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
+      if (reqMax <= safeMax && reqMin <= safeMin) valid.add(idx);
+    });
+
+    return valid;
+  }, [boxType, boxWidth, boxDepth, boxHeight, hopMemDatabase, muonNhip]);
+
+  // Reset khổ giấy nếu loại đang chọn không còn hợp lệ (chỉ với khổ chuẩn).
+  useEffect(() => {
+    if (typeof parentSizeIdx === 'number' && parentSizeIdx < PARENT_PAPER_SIZES.length) {
+      if (!validPaperSizeSet.has(parentSizeIdx)) setParentSizeIdx('');
+    }
+  }, [validPaperSizeSet, parentSizeIdx]);
+
+  // Máy in hợp lệ = max paper >= khổ giấy đang chọn.
+  const validPrinters = useMemo(() => {
+    if (!printerDatabase || printerDatabase.length === 0) return [];
+    const { w: pW, h: pH } = currentPaperSize;
+    if (pW <= 0 || pH <= 0) return printerDatabase;
+    const pMax = Math.max(pW, pH);
+    const pMin = Math.min(pW, pH);
+    return filterPrintersBySize(printerDatabase, pMax, pMin);
+  }, [printerDatabase, currentPaperSize]);
+
+  // Reset máy in nếu không còn hợp lệ với khổ giấy mới.
+  useEffect(() => {
+    if (selectedPrinter && validPrinters.length > 0) {
+      if (!validPrinters.find(p => p.id === selectedPrinter)) setSelectedPrinter('');
+    }
+  }, [validPrinters, selectedPrinter]);
 
   // Logic kiểm tra đã nhập đủ 3 chiều kích thước chưa
   const hasValidDimensions = safeParseNumber(boxWidth) > 0 && safeParseNumber(boxDepth) > 0 && safeParseNumber(boxHeight) > 0;
@@ -283,9 +341,14 @@ function HopMemCalculator() {
     const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
     const pMax = Math.max(Pw, Ph);
     const pMin = Math.min(Pw, Ph);
+    const safeMax = pMax - SAFE_MARGIN_CM * 2;
+    const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
 
-    if (reqMax > pMax || reqMin > pMin) {
-      setError(`Kích thước cụm khuôn (${reqMax.toFixed(1)} x ${reqMin.toFixed(1)} cm) lớn hơn khổ giấy in (${pMax} x ${pMin} cm). Vui lòng điều chỉnh.`);
+    if (reqMax > safeMax || reqMin > safeMin) {
+      const why = reqMax > safeMax
+        ? `chiều dài khuôn (${reqMax.toFixed(1)} cm) vượt chiều dài an toàn tờ (${safeMax.toFixed(1)} cm)`
+        : `chiều rộng khuôn (${reqMin.toFixed(1)} cm) vượt chiều rộng an toàn tờ (${safeMin.toFixed(1)} cm${!muonNhip ? ', đã trừ nhíp 1 cm' : ''})`;
+      setError(`Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.`);
       setResult(null);
       setIsCalculated(false);
       return;
@@ -603,7 +666,11 @@ function HopMemCalculator() {
             </label>
             <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none text-sm" value={parentSizeIdx} onChange={(e) => setParentSizeIdx(e.target.value === '' ? '' : parseInt(e.target.value))}>
               <option value="" disabled hidden>Chọn khổ giấy in...</option>
-              {PARENT_PAPER_SIZES.map((size, idx) => (<option key={idx} value={idx}>{size.label}</option>))}
+              {PARENT_PAPER_SIZES.map((size, idx) => (
+                validPaperSizeSet.has(idx)
+                  ? <option key={idx} value={idx}>{size.label}</option>
+                  : null
+              ))}
               <option value={PARENT_PAPER_SIZES.length}>Tùy chọn...</option>
               <option value={PARENT_PAPER_SIZES.length + 1}>Xả lô (Từ cuộn)...</option>
             </select>
@@ -670,7 +737,7 @@ function HopMemCalculator() {
               <label className="text-xs font-medium text-slate-600">Chọn máy in</label>
               <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={selectedPrinter} onChange={(e) => setSelectedPrinter(e.target.value)}>
                 <option value="">Chọn máy...</option>
-                {printerDatabase.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                {validPrinters.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
               </select>
             </div>
           </div>
