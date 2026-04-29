@@ -12,6 +12,7 @@ const QuoteHistory = lazy(() => import('./components/QuoteHistory'));
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState('catalogue'); 
+  const [editingQuote, setEditingQuote] = useState(null);
   const { priceLoadError } = usePricingDataContext();
 
   const TABS = [
@@ -27,16 +28,25 @@ function AppShell() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'toroi': return <ToRoiCalculator />;
-      case 'catalogue': return <CatalogueCalculator />;
+      case 'toroi': return <ToRoiCalculator editingQuote={editingQuote} />;
+      case 'catalogue': return <CatalogueCalculator editingQuote={editingQuote} />;
       case 'vo': return <VoCalculator />;
-      case 'hopmem': return <HopMemCalculator />;
-      case 'tuigiay': return <TuiGiayCalculator />;
+      case 'hopmem': return <HopMemCalculator editingQuote={editingQuote} />;
+      case 'tuigiay': return <TuiGiayCalculator editingQuote={editingQuote} />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
-      case 'quoteHistory': return <QuoteHistory />;
+      case 'quoteHistory': return <QuoteHistory onEditQuote={handleEditQuote} />;
       default: return <ToRoiCalculator />;
     }
+  };
+
+  const handleEditQuote = (quote) => {
+    const category = String(quote?.productCategory || '').toLowerCase();
+    if (category.includes('catalogue')) setActiveTab('catalogue');
+    else if (category.includes('tờ') || category.includes('to roi') || category.includes('rời')) setActiveTab('toroi');
+    else if (category.includes('hộp') || category.includes('hop')) setActiveTab('hopmem');
+    else if (category.includes('túi') || category.includes('tui')) setActiveTab('tuigiay');
+    setEditingQuote(quote);
   };
 
   return (

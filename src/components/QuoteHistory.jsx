@@ -39,7 +39,7 @@ function QuoteSkeleton() {
   );
 }
 
-function QuoteHistory() {
+function QuoteHistory({ onEditQuote }) {
   const [quotes, setQuotes] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
@@ -121,7 +121,8 @@ function QuoteHistory() {
   };
 
   const handleEditQuote = (quote) => {
-    window.dispatchEvent(new CustomEvent('quote-history:edit-requested', { detail: quote }));
+    if (onEditQuote) onEditQuote(quote);
+    setSelectedQuote(null);
   };
 
   return (

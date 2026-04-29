@@ -7,7 +7,7 @@ import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function ToRoiCalculator() {
+function ToRoiCalculator({ editingQuote }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -53,6 +53,7 @@ function ToRoiCalculator() {
   const [generatedOrder, setGeneratedOrder] = useState('');
   const [orderCopied, setOrderCopied] = useState(false);
 
+  const appliedEditingQuoteIdRef = useRef(null);
   const quantityRef = useRef(null);
   const productSizeRef = useRef(null);
   const customProductSizeRef = useRef(null);
@@ -64,6 +65,50 @@ function ToRoiCalculator() {
   const selectedPrinterRef = useRef(null);
 
   const MARGIN = PRINT_MARGIN_CM;
+
+  useEffect(() => {
+    if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
+    const category = String(editingQuote.productCategory || '').toLowerCase();
+    if (!category.includes('tờ') && !category.includes('rời') && !category.includes('to roi')) return;
+
+    const specs = editingQuote.specifications || {};
+    appliedEditingQuoteIdRef.current = editingQuote.id;
+    setProductName(editingQuote.productName || productName);
+    if (specs.quantity) setQuantity(String(specs.quantity));
+    if (specs.paperType) setPaperType(specs.paperType);
+    if (specs.paperGsm) setPaperGsm(Number(specs.paperGsm));
+    if (specs.printColors) setPrintColors(Number(specs.printColors));
+    if (specs.printSides) setPrintSides(Number(specs.printSides));
+    if (specs.impositionStyle) setImpositionStyle(specs.impositionStyle);
+    if (specs.lamination) setLamination(specs.lamination);
+    if (specs.laminationSides) setLaminationSides(Number(specs.laminationSides));
+    if (specs.foldingLines !== undefined) setFoldingLines(Number(specs.foldingLines));
+    if (specs.markup) setMarkup(Number(specs.markup));
+
+    const productSizeIndex = PRODUCT_SIZES.findIndex((item) => item.label === specs.productSize);
+    if (productSizeIndex >= 0) setProductTypeIdx(productSizeIndex);
+    else if (specs.result?.productW && specs.result?.productH) {
+      setProductTypeIdx(PRODUCT_SIZES.length - 1);
+      setCustomW(String(specs.result.productW));
+      setCustomH(String(specs.result.productH));
+    }
+
+    if (specs.result?.parentW && specs.result?.parentH) {
+      const parentSizeIndex = PARENT_PAPER_SIZES.findIndex((item) => (
+        Number(item.w) === Number(specs.result.parentW) && Number(item.h) === Number(specs.result.parentH)
+      ));
+      if (parentSizeIndex >= 0) setParentSizeIdx(parentSizeIndex);
+      else {
+        setParentSizeIdx(PARENT_PAPER_SIZES.length);
+        setCustomParentW(String(specs.result.parentW));
+        setCustomParentH(String(specs.result.parentH));
+      }
+    }
+
+    if (specs.result) setResult(specs.result);
+    setError('');
+    setFieldErrors({});
+  }, [editingQuote, productName]);
 
   const { reqMax, reqMin } = useMemo(() => {
     let pw = 0, ph = 0;
@@ -751,6 +796,7 @@ function ToRoiCalculator() {
         ) : result ? (
           <>
             <QuoteSaveForm
+              editingQuote={editingQuote}
               quote={{
                 productCategory: 'Tờ rời',
                 productName,

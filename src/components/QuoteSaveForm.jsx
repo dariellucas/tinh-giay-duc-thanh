@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Save } from 'lucide-react';
-import { saveQuote } from '../services/quoteService';
+import { saveQuote, updateQuote } from '../services/quoteService';
 
 const QUOTE_AUTHOR_KEY = 'quoteAuthorName';
 
-function QuoteSaveForm({ quote }) {
+function QuoteSaveForm({ quote, editingQuote }) {
   const [customerName, setCustomerName] = useState('');
   const [quotedBy, setQuotedBy] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -15,6 +15,12 @@ function QuoteSaveForm({ quote }) {
     if (typeof window === 'undefined') return;
     setQuotedBy(localStorage.getItem(QUOTE_AUTHOR_KEY) || '');
   }, []);
+
+  useEffect(() => {
+    if (!editingQuote) return;
+    setCustomerName(editingQuote.customerName || '');
+    setQuotedBy(editingQuote.quotedBy || '');
+  }, [editingQuote]);
 
   useEffect(() => {
     setSavedQuoteCode('');
@@ -44,11 +50,18 @@ function QuoteSaveForm({ quote }) {
         localStorage.setItem(QUOTE_AUTHOR_KEY, trimmedQuotedBy);
       }
 
-      const savedQuote = await saveQuote({
+      const mutationPayload = {
         ...quote,
         customerName: trimmedCustomerName,
         quotedBy: trimmedQuotedBy,
-      });
+      };
+      const savedQuote = editingQuote?.id
+        ? await updateQuote({
+          ...mutationPayload,
+          id: editingQuote.id,
+          quoteCode: editingQuote.quoteCode,
+        })
+        : await saveQuote(mutationPayload);
       setSavedQuoteCode(savedQuote.quoteCode);
     } catch (saveError) {
       setError(saveError?.message || 'Không lưu được báo giá.');
@@ -62,7 +75,9 @@ function QuoteSaveForm({ quote }) {
       <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
         <div className="grid flex-1 gap-3 md:grid-cols-2">
           <div className="space-y-1.5">
-            <label className="text-xs font-bold uppercase tracking-wider text-blue-900">Tên khách hàng *</label>
+            <label className="text-xs font-bold uppercase tracking-wider text-blue-900">
+              {editingQuote ? `Đang chỉnh sửa ${editingQuote.quoteCode || ''}` : 'Tên khách hàng *'}
+            </label>
             <input
               type="text"
               value={customerName}
@@ -90,14 +105,14 @@ function QuoteSaveForm({ quote }) {
           className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
         >
           <Save size={16} />
-          <span>{isSaving ? 'Đang lưu...' : 'Lưu báo giá'}</span>
+          <span>{isSaving ? 'Đang lưu...' : editingQuote ? 'Cập nhật báo giá' : 'Lưu báo giá'}</span>
         </button>
       </div>
 
       {savedQuoteCode && (
         <p className="mt-3 flex items-center gap-2 text-sm font-semibold text-emerald-700">
           <CheckCircle2 size={16} />
-          <span>Đã lưu báo giá {savedQuoteCode}.</span>
+          <span>{editingQuote ? 'Đã cập nhật' : 'Đã lưu'} báo giá {savedQuoteCode}.</span>
         </p>
       )}
 

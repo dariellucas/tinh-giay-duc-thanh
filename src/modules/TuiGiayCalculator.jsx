@@ -3,6 +3,7 @@ import { AlertCircle, Box, Maximize, Printer, RefreshCw, ShoppingBag, X, ZoomIn 
 import { DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import { Box3DViewer } from '../components/viewers/HopMemViewers';
 import { computeTuiGiayKhuonUnit, TuiGiayFlatLayoutViewer, TuiGiayImpositionViewer } from '../components/viewers/TuiGiayViewers';
+import QuoteSaveForm from '../components/QuoteSaveForm';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { calculateEmbossCost, calculateFoilCost, filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
@@ -108,7 +109,7 @@ function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, quai, finishing
   };
 }
 
-function TuiGiayCalculator() {
+function TuiGiayCalculator({ editingQuote }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -169,6 +170,7 @@ function TuiGiayCalculator() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
 
+  const appliedEditingQuoteIdRef = useRef(null);
   const boxDimensionsRef = useRef(null);
   const quantityRef = useRef(null);
   const paperTypeRef = useRef(null);
@@ -180,6 +182,43 @@ function TuiGiayCalculator() {
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
+
+  useEffect(() => {
+    if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
+    const category = String(editingQuote.productCategory || '').toLowerCase();
+    if (!category.includes('túi') && !category.includes('tui')) return;
+
+    const specs = editingQuote.specifications || {};
+    appliedEditingQuoteIdRef.current = editingQuote.id;
+    setProductName(editingQuote.productName || productName);
+    if (specs.quantity) setQuantity(String(specs.quantity));
+    if (specs.dimensions) {
+      if (specs.dimensions.width) setBoxWidth(String(specs.dimensions.width));
+      if (specs.dimensions.depth) setBoxDepth(String(specs.dimensions.depth));
+      if (specs.dimensions.height) setBoxHeight(String(specs.dimensions.height));
+    }
+    if (specs.matTui) setMatTui(specs.matTui);
+    if (specs.soManh) setSoManh(specs.soManh);
+    if (specs.quai) setQuai(specs.quai);
+    if (specs.paperType) setPaperType(specs.paperType);
+    if (specs.paperGsm) setPaperGsm(Number(specs.paperGsm));
+    if (specs.printColors) setPrintColors(Number(specs.printColors));
+    if (specs.lamination) setLamination(specs.lamination);
+    if (typeof specs.hasFoil === 'boolean') setHasFoil(specs.hasFoil);
+    if (specs.foilLength !== undefined) setFoilLength(String(specs.foilLength));
+    if (specs.foilWidth !== undefined) setFoilWidth(String(specs.foilWidth));
+    if (typeof specs.hasEmboss === 'boolean') setHasEmboss(specs.hasEmboss);
+    if (specs.embossLength !== undefined) setEmbossLength(String(specs.embossLength));
+    if (specs.embossWidth !== undefined) setEmbossWidth(String(specs.embossWidth));
+    if (specs.markup) setMarkup(Number(specs.markup));
+    if (specs.result) {
+      setResult(specs.result);
+      setIsCalculated(true);
+    }
+    setError('');
+    setFieldErrors({});
+  }, [editingQuote, productName]);
+
   const availableGsms = paperDatabase && paperDatabase[paperType] 
     ? Object.keys(paperDatabase[paperType]).map(Number).sort((a,b)=>a-b) 
     : [];
@@ -899,6 +938,38 @@ function TuiGiayCalculator() {
 
             {result && (
               <>
+              <QuoteSaveForm
+                editingQuote={editingQuote}
+                quote={{
+                  productCategory: 'Túi giấy',
+                  productName,
+                  totalAmount: Math.round(result.costs.giaBan),
+                  specifications: {
+                    quantity,
+                    dimensions: {
+                      width: boxWidth,
+                      depth: boxDepth,
+                      height: boxHeight,
+                    },
+                    matTui,
+                    soManh,
+                    quai,
+                    paperType,
+                    paperGsm,
+                    printColors,
+                    lamination,
+                    hasFoil,
+                    foilLength,
+                    foilWidth,
+                    hasEmboss,
+                    embossLength,
+                    embossWidth,
+                    markup,
+                    result,
+                  },
+                }}
+              />
+
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
                   <span className="text-slate-500 text-sm font-medium mb-1">Số tờ / túi</span>

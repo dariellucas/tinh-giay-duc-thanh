@@ -7,7 +7,7 @@ import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function CatalogueCalculator() {
+function CatalogueCalculator({ editingQuote }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -65,6 +65,7 @@ function CatalogueCalculator() {
   const [error, setError] = useState('');
   const [fieldErrors, setFieldErrors] = useState({});
 
+  const appliedEditingQuoteIdRef = useRef(null);
   const quantityRef = useRef(null);
   const productSizeRef = useRef(null);
   const customProductSizeRef = useRef(null);
@@ -81,6 +82,43 @@ function CatalogueCalculator() {
   const innerCustomParentSizeRef = useRef(null);
   const innerRollCutLengthRef = useRef(null);
   const innerPrinterRef = useRef(null);
+
+  useEffect(() => {
+    if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
+    if (editingQuote.productCategory && !String(editingQuote.productCategory).toLowerCase().includes('catalogue')) return;
+
+    const specs = editingQuote.specifications || {};
+    appliedEditingQuoteIdRef.current = editingQuote.id;
+    setProductName(editingQuote.productName || productName);
+    if (specs.quantity) setQuantity(String(specs.quantity));
+    if (specs.totalPages) setTotalPages(String(specs.totalPages));
+    if (specs.bindingType) setBindingType(specs.bindingType);
+    if (typeof specs.isCombinedPrint === 'boolean') setIsCombinedPrint(specs.isCombinedPrint);
+    if (specs.markup) setMarkup(Number(specs.markup));
+
+    const productSizeIndex = PRODUCT_SIZES.findIndex((item) => item.label === specs.productSize);
+    if (productSizeIndex >= 0) setProductTypeIdx(productSizeIndex);
+
+    if (specs.cover) {
+      if (specs.cover.paperType) setCoverPaperType(specs.cover.paperType);
+      if (specs.cover.paperGsm) setCoverPaperGsm(Number(specs.cover.paperGsm));
+      if (specs.cover.printColors) setCoverPrintColors(Number(specs.cover.printColors));
+      if (specs.cover.printSides) setCoverPrintSides(Number(specs.cover.printSides));
+      if (specs.cover.lamination) setCoverLamination(specs.cover.lamination);
+    }
+
+    if (specs.inner) {
+      if (specs.inner.paperType) setInnerPaperType(specs.inner.paperType);
+      if (specs.inner.paperGsm) setInnerPaperGsm(Number(specs.inner.paperGsm));
+      if (specs.inner.printColors) setInnerPrintColors(Number(specs.inner.printColors));
+      if (specs.inner.printSides) setInnerPrintSides(Number(specs.inner.printSides));
+      if (specs.inner.lamination) setInnerLamination(specs.inner.lamination);
+    }
+
+    if (specs.result) setResult(specs.result);
+    setError('');
+    setFieldErrors({});
+  }, [editingQuote, productName]);
 
   // --- DERIVED VARIABLES ---
   const innerPagesCount = parseInt(totalPages) ? Math.max(0, parseInt(totalPages) - 4) : 0;
@@ -1074,6 +1112,7 @@ function CatalogueCalculator() {
         ) : result ? (
           <>
             <QuoteSaveForm
+              editingQuote={editingQuote}
               quote={{
                 productCategory: 'Catalogue',
                 productName,

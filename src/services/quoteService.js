@@ -23,12 +23,12 @@ function buildQuotesUrl({ limit, offset, search, category }) {
   return url.toString();
 }
 
-function buildSaveQuoteUrl() {
+function buildQuoteMutationUrl(action) {
   const baseUrl = getAppsScriptUrl();
   if (!baseUrl) return '';
 
   const url = new URL(baseUrl);
-  url.searchParams.set('action', 'saveQuote');
+  url.searchParams.set('action', action);
   return url.toString();
 }
 
@@ -54,7 +54,7 @@ export async function fetchQuotes({ limit = DEFAULT_LIMIT, offset = 0, search = 
 }
 
 export async function saveQuote(quotePayload) {
-  const url = buildSaveQuoteUrl();
+  const url = buildQuoteMutationUrl('saveQuote');
   if (!url) {
     console.error('[CRITICAL] Missing API URL');
     throw new Error('Thiếu URL Apps Script để lưu báo giá.');
@@ -80,6 +80,37 @@ export async function saveQuote(quotePayload) {
     return data.quote;
   } catch (error) {
     console.error('Failed to save quote:', error);
+    throw error;
+  }
+}
+
+export async function updateQuote(quotePayload) {
+  const url = buildQuoteMutationUrl('updateQuote');
+  if (!url) {
+    console.error('[CRITICAL] Missing API URL');
+    throw new Error('Thiếu URL Apps Script để cập nhật báo giá.');
+  }
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      redirect: 'follow',
+      body: JSON.stringify(quotePayload),
+    });
+
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!data.ok) {
+      throw new Error(data.error || 'Không cập nhật được báo giá.');
+    }
+
+    notifyQuoteSaved(data.quote);
+    return data.quote;
+  } catch (error) {
+    console.error('Failed to update quote:', error);
     throw error;
   }
 }
