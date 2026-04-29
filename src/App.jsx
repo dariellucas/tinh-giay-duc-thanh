@@ -1,5 +1,5 @@
 import React, { Suspense, lazy, useState } from 'react';
-import { BookOpen, Book, Box, FileText, Layout, Mail, ShoppingBag, StickyNote } from 'lucide-react';
+import { BookOpen, Book, Box, FileText, History, Layout, Mail, ShoppingBag, StickyNote } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import { PricingDataProvider, usePricingDataContext } from './context/PricingDataContext';
 import { DecalCalculator, PhongBiCalculator, VoCalculator } from './modules/PlaceholderCalculators';
@@ -8,6 +8,7 @@ const ToRoiCalculator = lazy(() => import('./modules/ToRoiCalculator'));
 const CatalogueCalculator = lazy(() => import('./modules/CatalogueCalculator'));
 const HopMemCalculator = lazy(() => import('./modules/HopMemCalculator'));
 const TuiGiayCalculator = lazy(() => import('./modules/TuiGiayCalculator'));
+const QuoteHistory = lazy(() => import('./components/QuoteHistory'));
 
 function AppShell() {
   const [activeTab, setActiveTab] = useState('catalogue'); 
@@ -21,6 +22,7 @@ function AppShell() {
     { id: 'tuigiay', label: 'Túi giấy', icon: ShoppingBag },
     { id: 'phongbi', label: 'Phong bì', icon: Mail },
     { id: 'decal', label: 'Decal', icon: StickyNote },
+    { id: 'quoteHistory', label: 'Lịch sử báo giá', icon: History },
   ];
 
   const renderContent = () => {
@@ -32,6 +34,7 @@ function AppShell() {
       case 'tuigiay': return <TuiGiayCalculator />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
+      case 'quoteHistory': return <QuoteHistory />;
       default: return <ToRoiCalculator />;
     }
   };
