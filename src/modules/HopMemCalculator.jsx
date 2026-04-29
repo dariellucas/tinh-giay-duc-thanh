@@ -1,29 +1,134 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { AlertCircle, Box, Maximize, Printer, RefreshCw, X, ZoomIn } from 'lucide-react';
-import { DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
-import { Box3DViewer, BoxImpositionViewer, FlatLayoutViewer, getHopMemGeometry, getHopMemGeometryDao } from '../components/viewers/HopMemViewers';
+import { AlertCircle, Box, Maximize, Printer, RefreshCw, ShoppingBag, X, ZoomIn } from 'lucide-react';
+import { DEFAULT_GRIPPER_CM, HAO_CAN, HAO_IN, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
+import { Box3DViewer } from '../components/viewers/HopMemViewers';
+import { computeTuiGiayKhuonUnit, TuiGiayFlatLayoutViewer, TuiGiayImpositionViewer } from '../components/viewers/TuiGiayViewers';
+import QuoteSaveForm from '../components/QuoteSaveForm';
 import { usePricingDataContext } from '../context/PricingDataContext';
-import { useDebounce } from '../hooks/useDebounce';
 import { calculateEmbossCost, calculateFoilCost, filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function HopMemCalculator() {
+/** Fallback nếu dòng Sheet GiaCong không có minPrice */
+const GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND = 300_000;
+
+/**
+ * Tra `finishingDatabase` (Sheet GiaCong → API `finishing`): hạng mục dạng
+ * "Túi 1 mảnh có cạnh <=10" … (Hông Y trong app = "cạnh" trên sheet).
+ */
+function findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm) {
+  const y = safeParseNumber(String(hongYcm));
+  const rows = finishingDatabase || [];
+  const pieceRe = soManh === '1_manh' ? /\b1\s*mảnh\b/i : /\b2\s*mảnh\b/i;
+  const bagRows = rows.filter((r) => {
+    const it = String(r.item || '');
+    return pieceRe.test(it) && (/túi/i.test(it) || /cạnh/i.test(it));
+  });
+
+  const itLower = (r) => String(r.item || '').toLowerCase();
+  let bandTest;
+  let bandHint;
+  if (y <= 10) {
+    bandTest = (it) => /<=\s*10\b|≤\s*10\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 10';
+  } else if (y <= 14) {
+    bandTest = (it) => /<=\s*14\b|≤\s*14\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 14';
+  } else if (y <= 17) {
+    bandTest = (it) => /<=\s*17\b|≤\s*17\b/.test(it);
+    bandHint = 'Hông (Y) ≤ 17';
+  } else {
+    bandTest = (it) => />\s*17\b|≥\s*17\b|>=\s*17\b/.test(it);
+    bandHint = 'Hông (Y) > 17';
+  }
+
+  const row = bagRows.find((r) => bandTest(itLower(r)));
+  return row ? { row, bandHint } : null;
+}
+
+/**
+ * Đơn giá gia công túi (VNĐ/chiếc): đơn giá + tối thiểu đơn hàng lấy từ Sheet GiaCong (`finishing`);
+/**
+ * Phân loại thể tích túi theo công thức AppSheet:
+ * ≤3900 → "nhỏ"; ≤6820 → "trung bình"; >6820 → "to"
+ */
+function classifyTuiVolume(x, y, z) {
+  const vol = safeParseNumber(String(x)) * safeParseNumber(String(y)) * safeParseNumber(String(z));
+  if (vol <= 3900) return { size: 'nhỏ', vol };
+  if (vol <= 6820) return { size: 'trung bình', vol };
+  return { size: 'to', vol };
+}
+
+/**
+ * Tra `finishingDatabase` (Sheet GiaCong) để lấy giá khuôn bế túi.
+ * Hạng mục dạng: "Khuôn bế túi 1/2 mảnh nhỏ/trung bình/to"
+ */
+function findTuiGiayKhuonBeRow(finishingDatabase, soManh, sizeLabel) {
+  const pieceText = soManh === '1_manh' ? '1 mảnh' : '2 mảnh';
+  const rows = finishingDatabase || [];
+  return rows.find((r) => {
+    const it = String(r.item || '').toLowerCase();
+    return (
+      it.includes('khuôn bế') &&
+      it.includes('túi') &&
+      it.includes(pieceText.toLowerCase()) &&
+      it.includes(sizeLabel.toLowerCase())
+    );
+  }) || null;
+}
+
+/**
+ * +500 nếu loại giấy Kraft (bất kỳ định lượng); +500 nếu quai Dây dù đẹp / Dây lụa.
+ */
+function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, quai, finishingDatabase }) {
+  const y = safeParseNumber(String(hongYcm));
+  const matched = findTuiGiayGiaCongFinishingRow(finishingDatabase, soManh, hongYcm);
+  const base = matched ? safeParseNumber(matched.row.price) : 0;
+  const minOrder = matched
+    ? (safeParseNumber(matched.row.minPrice) || GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND)
+    : GIA_CONG_TUI_MIN_ORDER_FALLBACK_VND;
+  const tierLabel = matched
+    ? `GiaCong: «${String(matched.row.item || '').trim()}» (${matched.bandHint})`
+    : 'Không tìm thấy dòng GiaCong túi (cần hạng mục dạng «Túi 1/2 mảnh có cạnh ≤…/ >…» trên Sheet GiaCong)';
+
+  const isKraftPaper = typeof paperType === 'string' && paperType.trim().toLowerCase().startsWith('kraft');
+  const quaiPremium = quai === 'day_du_dep' || quai === 'day_lua';
+  let surcharges = 0;
+  if (isKraftPaper) surcharges += 500;
+  if (quaiPremium) surcharges += 500;
+  const donGia = base + surcharges;
+
+  return {
+    baseDonGia: base,
+    surcharges,
+    donGia,
+    minOrder,
+    tierLabel,
+    isKraftPaper,
+    quaiPremium,
+    sheetRowMatched: Boolean(matched),
+  };
+}
+
+function TuiGiayCalculator() {
   const {
     paperDatabase,
     printerDatabase,
     finishingDatabase,
-    hopMemDatabase,
     dinhMucDatabase,
     isLoadingPrices,
     fetchPaperPrices,
   } = usePricingDataContext();
   // --- STATES THÔNG TIN CHUNG ---
-  const [productName, setProductName] = useState('Hộp mỹ phẩm');
+  const [productName, setProductName] = useState('Túi giấy');
   const [quantity, setQuantity] = useState('1000');
-  const [boxType, setBoxType] = useState('cai_2_dau');
-  const [boxWidth, setBoxWidth] = useState('13'); // Ngang
-  const [boxDepth, setBoxDepth] = useState('8'); // Hông
-  const [boxHeight, setBoxHeight] = useState('8'); // Cao
+  const [boxWidth, setBoxWidth] = useState('20'); // Ngang
+  const [boxDepth, setBoxDepth] = useState('10'); // Hông
+  const [boxHeight, setBoxHeight] = useState('30'); // Cao
+  const [gapMiec, setGapMiec] = useState('4');
+  const [taiDanStr, setTaiDanStr] = useState('2');
+  const [matTui, setMatTui] = useState('giong_nhau');
+  const [soManh, setSoManh] = useState('1_manh');
+  const [quai, setQuai] = useState('day_du_thuong');
 
   // --- STATES GIẤY & BÌNH BẢN ---
   const [paperType, setPaperType] = useState('Ivory');
@@ -34,12 +139,9 @@ function HopMemCalculator() {
   const [rollWidth, setRollWidth] = useState('');
   const [rollSplit, setRollSplit] = useState(1);
   const [rollCutLength, setRollCutLength] = useState('');
-  const [cols, setCols] = useState(1); // Số bát X
-  const [rows, setRows] = useState(1); // Số bát Y
-  const [daoTaiDan, setDaoTaiDan] = useState(false);
-  const [muonSong, setMuonSong] = useState(false);
+  const cols = 1; // Cố định 1 bát/tờ (túi giấy kích thước lớn, không xếp nhiều bát)
+  const rows = 1;
   const [muonNhip, setMuonNhip] = useState(false);
-  const [allowMixed, setAllowMixed] = useState(false);
 
   // --- STATES IN ẤN ---
   const [printColors, setPrintColors] = useState(4);
@@ -57,7 +159,7 @@ function HopMemCalculator() {
   const [embossWidth, setEmbossWidth] = useState('');
 
   // --- STATES TÀI CHÍNH ---
-  const [dieCost, setDieCost] = useState(0);
+
   const [shippingCost, setShippingCost] = useState(0);
   const [markup, setMarkup] = useState(DEFAULT_MARKUP);
 
@@ -75,7 +177,6 @@ function HopMemCalculator() {
   const parentSizeRef = useRef(null);
   const customParentSizeRef = useRef(null);
   const rollCutLengthRef = useRef(null);
-  const layoutRef = useRef(null);
   const selectedPrinterRef = useRef(null);
 
   // --- DERIVED DATA ---
@@ -101,154 +202,28 @@ function HopMemCalculator() {
     }
   }, [availableRolls, rollWidth]);
 
+  useEffect(() => {
+    if (paperType.startsWith('Kraft')) setGapMiec('0');
+    else setGapMiec('4');
+  }, [paperType]);
+
+  // Nhíp (gripper) offset = 1 cm; vùng in an toàn margin = 0.3 cm mỗi cạnh
   const GRIPPER_CM = DEFAULT_GRIPPER_CM;
   const SAFE_MARGIN_CM = 0.3;
 
-  const debouncedAutoFitInputs = useDebounce(
-    [boxType, boxWidth, boxDepth, boxHeight, parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength, muonSong, daoTaiDan, muonNhip],
-    300,
-  );
-
+  // Kích thước cụm khuôn = kích thước 1 bát (khuôn bế 1 mảnh)
+  // 1_manh: fullW × pieceH  |  2_manh: pieceW × pieceH (dùng chung khuôn cho 2 mảnh)
   const cumKhuonSize = useMemo(() => {
     const X = safeParseNumber(boxWidth);
     const Y = safeParseNumber(boxDepth);
     const Z = safeParseNumber(boxHeight);
-    const cCols = parseInt(cols) || 1;
-    const cRows = parseInt(rows) || 1;
+    if (X <= 0 || Y <= 0 || Z <= 0) return { w: 0, h: 0 };
+    const spec = computeTuiGiayKhuonUnit(X, Y, Z, safeParseNumber(taiDanStr), safeParseNumber(gapMiec), soManh);
+    const w = spec.mode === '2_manh' ? spec.pieceW : spec.singleW;
+    const h = spec.pieceH;
+    return { w, h };
+  }, [boxWidth, boxDepth, boxHeight, gapMiec, taiDanStr, soManh]);
 
-    if (X <= 0 || Y <= 0 || Z <= 0 || cCols <= 0 || cRows <= 0) return { w: 0, h: 0 };
-
-    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
-    if (!geom) return { w: 0, h: 0 };
-
-    const geomDao = getHopMemGeometryDao(boxType, X, Y, Z, hopMemDatabase);
-    const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
-    
-    const singleW = maxX - minX;
-    const singleH = maxY - minY;
-    const gap = muonSong ? 0 : DEFAULT_GAP_CM;
-
-    const stepW = singleW - overlapX + gap;
-    const stepH = singleH - overlapY + gap;
-
-    let extraW = 0;
-    if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && cRows >= 2) {
-      if (daoTaiDan && geomDao) {
-        extraW = 0;
-      } else {
-        extraW = Math.max(0, Y - taiDan);
-      }
-    }
-
-    const totalW = singleW + (cCols - 1) * stepW + extraW;
-    
-    let currentY = 0;
-    for (let r = 0; r < cRows; r++) {
-      if (r > 0) {
-        if ((boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc')) {
-          if (r % 2 === 1) currentY += singleH - overlapY + gap;
-          else currentY += singleH + gap;
-        } else {
-          currentY += stepH;
-        }
-      }
-    }
-    const totalH = currentY + singleH;
-
-    return { w: totalW, h: totalH };
-  }, [boxType, boxWidth, boxDepth, boxHeight, cols, rows, hopMemDatabase, muonSong, daoTaiDan]);
-
-  // --- THÊM MỚI: TỰ ĐỘNG TÍNH TOÁN SỐ BÁT IN KHI THAY ĐỔI KÍCH THƯỚC HOẶC KHỔ GIẤY ---
-  useEffect(() => {
-    const [dBoxType, dBoxWidth, dBoxDepth, dBoxHeight, dParentSizeIdx, dCustomParentW, dCustomParentH, dRollWidth, dRollSplit, dRollCutLength, dMuonSong, dDaoTaiDan, dMuonNhip] = debouncedAutoFitInputs;
-    const X = safeParseNumber(dBoxWidth);
-    const Y = safeParseNumber(dBoxDepth);
-    const Z = safeParseNumber(dBoxHeight);
-    
-    // Nếu chưa nhập đủ kích thước hoặc chưa chọn khổ giấy thì bỏ qua
-    if (X <= 0 || Y <= 0 || Z <= 0 || dParentSizeIdx === '') return;
-
-    // Lấy chính xác kích thước khổ giấy in
-    let Pw = 0, Ph = 0;
-    if (dParentSizeIdx === PARENT_PAPER_SIZES.length) {
-      Pw = safeParseNumber(dCustomParentW);
-      Ph = safeParseNumber(dCustomParentH);
-    } else if (dParentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      Pw = safeParseNumber(dRollWidth) / dRollSplit;
-      Ph = safeParseNumber(dRollCutLength);
-    } else {
-      Pw = PARENT_PAPER_SIZES[dParentSizeIdx]?.w || 0;
-      Ph = PARENT_PAPER_SIZES[dParentSizeIdx]?.h || 0;
-    }
-    if (Pw <= 0 || Ph <= 0) return;
-
-    const geom = getHopMemGeometry(dBoxType, X, Y, Z, hopMemDatabase);
-    if (!geom) return;
-    const geomDao = getHopMemGeometryDao(dBoxType, X, Y, Z, hopMemDatabase);
-
-    const { minX, maxX, minY, maxY, overlapX, overlapY, taiDan } = geom;
-    const singleW = maxX - minX;
-    const singleH = maxY - minY;
-    const gap = dMuonSong ? 0 : DEFAULT_GAP_CM;
-    const stepW = singleW - overlapX + gap;
-    const stepH = singleH - overlapY + gap;
-
-    // Thuật toán tìm số hàng tối đa
-    const getMaxRows = (maxH) => {
-      if (singleH > maxH) return 0;
-      let r = 1;
-      let currentY = 0;
-      while (true) {
-        let nextY = currentY;
-        if ((dBoxType === 'nap_cai_day_khoa' || dBoxType === 'nap_cai_day_moc')) {
-           if (r % 2 === 1) nextY += singleH - overlapY + gap;
-           else nextY += singleH + gap;
-        } else {
-           nextY += stepH;
-        }
-        if (nextY + singleH > maxH) break;
-        currentY = nextY;
-        r++;
-      }
-      return r;
-    };
-
-    // Thuật toán tìm số cột tối đa
-    const getMaxCols = (maxW, rCount) => {
-      let extraW = 0;
-      if ((dBoxType === 'nap_cai_day_khoa' || dBoxType === 'nap_cai_day_moc') && rCount >= 2) {
-        if (dDaoTaiDan && geomDao) extraW = 0;
-        else extraW = Math.max(0, Y - taiDan);
-      }
-      if (singleW + extraW > maxW) return 0;
-      if (stepW <= 0) return 1;
-      return Math.floor((maxW - singleW - extraW) / stepW) + 1;
-    };
-
-    const tryFit = (paperW, paperH) => {
-      const gripper = dMuonNhip ? 0 : GRIPPER_CM;
-      const safeW = paperW - SAFE_MARGIN_CM * 2 - (paperW <= paperH ? gripper : 0);
-      const safeH = paperH - SAFE_MARGIN_CM * 2 - (paperH < paperW ? gripper : 0);
-      if (safeW <= 0 || safeH <= 0) return { c: 0, r: 0, total: 0 };
-      const r = getMaxRows(safeH);
-      if (r === 0) return { c: 0, r: 0, total: 0 };
-      const c = getMaxCols(safeW, r);
-      return { c, r, total: c * r };
-    };
-
-    // Thử tính trên cả 2 chiều xoay của khổ giấy
-    const opt1 = tryFit(Pw, Ph);
-    const opt2 = tryFit(Ph, Pw);
-
-    let bestOpt = opt1.total >= opt2.total ? opt1 : opt2;
-
-    // Tự động cập nhật state nếu tìm được phương án xếp phù hợp
-    if (bestOpt.total > 0) {
-      setCols(prev => (prev !== bestOpt.c ? bestOpt.c : prev));
-      setRows(prev => (prev !== bestOpt.r ? bestOpt.r : prev));
-    }
-  }, [debouncedAutoFitInputs, hopMemDatabase]);
-  // --- KẾT THÚC THÊM MỚI ---
 
   // Ghi nhận khổ giấy in hiện tại (dùng để truyền xuống preview bản vẽ thời gian thực)
   const currentPaperSize = useMemo(() => {
@@ -266,22 +241,15 @@ function HopMemCalculator() {
     return { w: Pw, h: Ph };
   }, [parentSizeIdx, customParentW, customParentH, rollWidth, rollSplit, rollCutLength]);
 
-  // Khổ giấy hợp lệ = vùng in an toàn chứa được ít nhất 1 bát hộp.
+  // Khổ giấy hợp lệ = vùng in an toàn chứa được cụm khuôn (sau nhíp + margin)
   const validPaperSizeSet = useMemo(() => {
     const valid = new Set();
-    const X = safeParseNumber(boxWidth);
-    const Y = safeParseNumber(boxDepth);
-    const Z = safeParseNumber(boxHeight);
-    const geom = getHopMemGeometry(boxType, X, Y, Z, hopMemDatabase);
-
-    if (X <= 0 || Y <= 0 || Z <= 0 || !geom) {
+    if (cumKhuonSize.w <= 0 || cumKhuonSize.h <= 0) {
       PARENT_PAPER_SIZES.forEach((_, idx) => valid.add(idx));
       return valid;
     }
-
-    const reqMax = Math.max(geom.maxX - geom.minX, geom.maxY - geom.minY);
-    const reqMin = Math.min(geom.maxX - geom.minX, geom.maxY - geom.minY);
-
+    const reqMax = Math.max(cumKhuonSize.w, cumKhuonSize.h);
+    const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
     PARENT_PAPER_SIZES.forEach((size, idx) => {
       const pMax = Math.max(size.w, size.h);
       const pMin = Math.min(size.w, size.h);
@@ -289,28 +257,26 @@ function HopMemCalculator() {
       const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
       if (reqMax <= safeMax && reqMin <= safeMin) valid.add(idx);
     });
-
     return valid;
-  }, [boxType, boxWidth, boxDepth, boxHeight, hopMemDatabase, muonNhip]);
+  }, [cumKhuonSize, muonNhip]);
 
-  // Reset khổ giấy nếu loại đang chọn không còn hợp lệ (chỉ với khổ chuẩn).
+  // Reset khổ giấy nếu loại đang chọn không còn hợp lệ (chỉ với khổ chuẩn)
   useEffect(() => {
     if (typeof parentSizeIdx === 'number' && parentSizeIdx < PARENT_PAPER_SIZES.length) {
       if (!validPaperSizeSet.has(parentSizeIdx)) setParentSizeIdx('');
     }
   }, [validPaperSizeSet, parentSizeIdx]);
 
-  // Máy in hợp lệ = max paper >= khổ giấy đang chọn.
+  // Máy in hợp lệ = max paper ≥ khổ giấy đang chọn
   const validPrinters = useMemo(() => {
     if (!printerDatabase || printerDatabase.length === 0) return [];
     const { w: pW, h: pH } = currentPaperSize;
     if (pW <= 0 || pH <= 0) return printerDatabase;
-    const pMax = Math.max(pW, pH);
-    const pMin = Math.min(pW, pH);
+    const pMax = Math.max(pW, pH), pMin = Math.min(pW, pH);
     return filterPrintersBySize(printerDatabase, pMax, pMin);
   }, [printerDatabase, currentPaperSize]);
 
-  // Reset máy in nếu không còn hợp lệ với khổ giấy mới.
+  // Reset máy in nếu không còn hợp lệ với khổ giấy mới
   useEffect(() => {
     if (selectedPrinter && validPrinters.length > 0) {
       if (!validPrinters.find(p => p.id === selectedPrinter)) setSelectedPrinter('');
@@ -328,28 +294,15 @@ function HopMemCalculator() {
     parentSize: parentSizeRef,
     customParentSize: customParentSizeRef,
     rollCutLength: rollCutLengthRef,
-    layout: layoutRef,
     selectedPrinter: selectedPrinterRef,
   };
 
-  const fieldErrorOrder = [
-    'boxDimensions',
-    'quantity',
-    'paperType',
-    'paperGsm',
-    'parentSize',
-    'customParentSize',
-    'rollCutLength',
-    'layout',
-    'selectedPrinter',
-  ];
+  const fieldErrorOrder = ['boxDimensions', 'quantity', 'paperType', 'paperGsm', 'parentSize', 'customParentSize', 'rollCutLength', 'selectedPrinter'];
 
   const scrollToFirstFieldError = (errors) => {
     const firstErrorKey = fieldErrorOrder.find((key) => errors[key]);
     const target = firstErrorKey ? fieldRefs[firstErrorKey]?.current : null;
-    if (target) {
-      target.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
+    if (target) target.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
 
   const applyValidationErrors = (errors, summaryMessage) => {
@@ -364,9 +317,7 @@ function HopMemCalculator() {
     setFieldErrors((prev) => {
       if (!keys.some((key) => prev[key])) return prev;
       const next = { ...prev };
-      keys.forEach((key) => {
-        delete next[key];
-      });
+      keys.forEach((key) => delete next[key]);
       return next;
     });
   };
@@ -389,20 +340,13 @@ function HopMemCalculator() {
     const nextFieldErrors = {};
 
     if (safeParseNumber(boxWidth) <= 0 || safeParseNumber(boxDepth) <= 0 || safeParseNumber(boxHeight) <= 0) {
-      nextFieldErrors.boxDimensions = 'Nhập đủ 3 chiều hộp và mỗi chiều phải lớn hơn 0.';
+      nextFieldErrors.boxDimensions = 'Nhập đủ 3 chiều túi và mỗi chiều phải lớn hơn 0.';
     }
     if (!quantity || isNaN(qty) || qty <= 0) {
-      nextFieldErrors.quantity = 'Số lượng hộp phải lớn hơn 0.';
+      nextFieldErrors.quantity = 'Số lượng túi phải lớn hơn 0.';
     }
-    if (!paperType) {
-      nextFieldErrors.paperType = 'Chọn loại giấy.';
-    }
-    if (!paperGsm) {
-      nextFieldErrors.paperGsm = 'Chọn định lượng giấy.';
-    }
-    if ((parseInt(cols) || 0) <= 0 || (parseInt(rows) || 0) <= 0) {
-      nextFieldErrors.layout = 'Số bát X và Y phải lớn hơn 0.';
-    }
+    if (!paperType) nextFieldErrors.paperType = 'Chọn loại giấy.';
+    if (!paperGsm) nextFieldErrors.paperGsm = 'Chọn định lượng giấy.';
     if (parentSizeIdx === '') {
       nextFieldErrors.parentSize = 'Chọn khổ giấy in.';
     }
@@ -410,12 +354,8 @@ function HopMemCalculator() {
       nextFieldErrors.customParentSize = 'Nhập đủ ngang và cao cho khổ giấy tùy chọn.';
     }
     if (parentSizeIdx === PARENT_PAPER_SIZES.length + 1) {
-      if (!rollWidth || safeParseNumber(rollWidth) <= 0) {
-        nextFieldErrors.parentSize = 'Loại giấy/định lượng này chưa có khổ lô hợp lệ.';
-      }
-      if (safeParseNumber(rollCutLength) <= 0) {
-        nextFieldErrors.rollCutLength = 'Nhập chiều dài xả lớn hơn 0.';
-      }
+      if (!rollWidth || safeParseNumber(rollWidth) <= 0) nextFieldErrors.parentSize = 'Loại giấy/định lượng này chưa có khổ lô hợp lệ.';
+      if (safeParseNumber(rollCutLength) <= 0) nextFieldErrors.rollCutLength = 'Nhập chiều dài xả lớn hơn 0.';
     }
     if (!selectedPrinter) {
       nextFieldErrors.selectedPrinter = 'Chọn máy in phù hợp.';
@@ -444,6 +384,7 @@ function HopMemCalculator() {
     const reqMin = Math.min(cumKhuonSize.w, cumKhuonSize.h);
     const pMax = Math.max(Pw, Ph);
     const pMin = Math.min(Pw, Ph);
+    // Vùng in an toàn: trừ margin 2 cạnh + nhíp (trừ khi mượn nhíp)
     const safeMax = pMax - SAFE_MARGIN_CM * 2;
     const safeMin = pMin - SAFE_MARGIN_CM * 2 - (muonNhip ? 0 : GRIPPER_CM);
 
@@ -452,11 +393,8 @@ function HopMemCalculator() {
         ? `chiều dài khuôn (${reqMax.toFixed(1)} cm) vượt chiều dài an toàn tờ (${safeMax.toFixed(1)} cm)`
         : `chiều rộng khuôn (${reqMin.toFixed(1)} cm) vượt chiều rộng an toàn tờ (${safeMin.toFixed(1)} cm${!muonNhip ? ', đã trừ nhíp 1 cm' : ''})`;
       applyValidationErrors(
-        {
-          parentSize: `Khổ giấy hiện tại không đủ vùng in an toàn: ${why}.`,
-          layout: 'Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.',
-        },
-        `Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn, giảm số bát hoặc bật Mượn nhíp.`,
+        { parentSize: `Khổ giấy hiện tại không đủ vùng in an toàn: ${why}.` },
+        `Khuôn không vừa vùng in an toàn: ${why}. Chọn khổ giấy lớn hơn hoặc bật Mượn nhíp.`,
       );
       return;
     }
@@ -464,9 +402,20 @@ function HopMemCalculator() {
     setFieldErrors({});
     setError('');
 
-    const itemsPerSheet = cols * rows;
-    const soToInLyThuyet = Math.ceil(qty / itemsPerSheet);
-    const dynamicSpoilage = getSpoilageByQuantity(dinhMucDatabase, soToInLyThuyet);
+    const itemsPerSheet = 1; // 1 bát/tờ cố định
+    // 2_manh: mỗi túi cần 2 tờ in (mỗi tờ 1 mảnh); 1_manh: 1 tờ/túi
+    const piecesPerBag = soManh === '2_manh' ? 2 : 1;
+    // Số tờ lý thuyết cho 1 bài in (1 mảnh hoặc toàn túi 1 mảnh)
+    const soToInMotBai = Math.ceil(qty / itemsPerSheet);
+    // Số tờ lý thuyết tổng cộng (nhân piecesPerBag vì mỗi bài in = 1 mảnh)
+    const soToInLyThuyet = soToInMotBai * piecesPerBag;
+
+    // Bù hao tra theo số tờ MỘT bài in (soToInMotBai), rồi nhân số bài in
+    // 2_manh + khac_nhau: 2 bài in độc lập → bù hao × 2 (mỗi bài có bù hao riêng)
+    // 2_manh + giong_nhau: cùng bản in → bù hao × 1 (bù hao đã được nhân qua soToInLyThuyet)
+    const sooBaiIn = (soManh === '2_manh' && matTui === 'khac_nhau') ? 2 : 1;
+    const buHaoMotBai = getSpoilageByQuantity(dinhMucDatabase, soToInMotBai);
+    const dynamicSpoilage = buHaoMotBai * sooBaiIn;
     const parentSheetsNeeded = soToInLyThuyet + dynamicSpoilage;
 
     // 1. Tiền giấy
@@ -484,79 +433,19 @@ function HopMemCalculator() {
       tienXaLo = xaLoObj ? safeParseNumber(xaLoObj.minPrice) : 150000;
     }
 
-    const getGiaCongRule = () => {
-      const keyword = boxType === 'nap_cai_day_moc' ? 'hộp mềm móc đáy' : 'hộp mềm số lượng';
-      const candidateRows = (finishingDatabase || []).filter((row) => {
-        const item = String(row?.item || '').toLowerCase();
-        return item.includes(keyword);
-      });
-
-      const normalizedOperator = (rawOperator) => {
-        const op = String(rawOperator || '').trim();
-        if (op === '≤') return '<=';
-        if (op === '≥') return '>=';
-        return op;
-      };
-
-      const parsedRules = [];
-
-      for (let i = 0; i < candidateRows.length; i++) {
-        const row = candidateRows[i];
-        const itemText = String(row.item || '').toLowerCase();
-        const condMatch = itemText.match(/([<>]=?|[≤≥])\s*([\d\.,]+)/);
-
-        if (!condMatch) continue;
-
-        const operator = normalizedOperator(condMatch[1]);
-        const threshold = safeParseNumber(condMatch[2]);
-        let isMatch = false;
-
-        if (operator === '<' && qty < threshold) isMatch = true;
-        if (operator === '<=' && qty <= threshold) isMatch = true;
-        if (operator === '>' && qty > threshold) isMatch = true;
-        if (operator === '>=' && qty >= threshold) isMatch = true;
-
-        parsedRules.push({
-          operator,
-          threshold,
-          row,
-        });
-
-        if (isMatch) {
-          return {
-            donGia: safeParseNumber(row.price),
-            minPrice: safeParseNumber(row.minPrice),
-            ruleLabel: String(row.item || ''),
-          };
-        }
-      }
-
-      // Fallback cho dữ liệu bị hở mốc biên (vd: "<30.000" và ">30.000")
-      // Ưu tiên lấy rule phía trên mốc (>) để không báo "không tìm thấy đơn giá".
-      const boundaryRule = parsedRules.find((rule) => rule.operator === '>' && qty === rule.threshold)
-        || parsedRules.find((rule) => rule.operator === '<' && qty === rule.threshold);
-      if (boundaryRule) {
-        return {
-          donGia: safeParseNumber(boundaryRule.row.price),
-          minPrice: safeParseNumber(boundaryRule.row.minPrice),
-          ruleLabel: String(boundaryRule.row.item || ''),
-        };
-      }
-
-      return { donGia: 0, minPrice: 0, ruleLabel: '' };
-    };
-
-    // 2. Tiền kẽm & In (Mặc định Hộp mềm in 1 mặt)
+    // 2. Tiền kẽm & In
+    // khac_nhau: 2 bài in riêng → kẽm × 2, công in tính từng bài rồi × 2
     const soKem = printColors;
     const selectedPrinterObj = printerDatabase.find(p => p.id === selectedPrinter);
     const giaKem = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.platePrice) : 0;
-    const tienKem = soKem * giaKem;
+    const tienKem = sooBaiIn * soKem * giaKem;
 
-    const soLuotInMoiKem = soToInLyThuyet;
-    const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000); 
+    // soLuotInMoiKem: số tờ của 1 bài in (khac_nhau = qty; các TH khác = soToInLyThuyet)
+    const soLuotInMoiKem = sooBaiIn === 2 ? soToInMotBai : soToInLyThuyet;
+    const quaLuotMoiKem = Math.max(0, soLuotInMoiKem - 1000);
     const giaLuotCoBan = selectedPrinterObj ? safeParseNumber(selectedPrinterObj.runPrice) : 0;
     const giaLuot = printColors === 1 ? giaLuotCoBan + 10 : giaLuotCoBan;
-    const tienIn = quaLuotMoiKem * soKem * giaLuot;
+    const tienIn = sooBaiIn * quaLuotMoiKem * soKem * giaLuot;
 
     // 3. Tiền cán màng
     let tienCan = 0;
@@ -567,7 +456,7 @@ function HopMemCalculator() {
       if (canObj) {
         const toCan = Math.max(0, parentSheetsNeeded - HAO_IN - HAO_CAN);
         const areaCm2 = Pw * Ph;
-        const laminationSides = 1; // Hộp mềm thường cán 1 mặt ngoài
+        const laminationSides = 1; // Túi giấy: tạm cán 1 mặt (Mặt túi sẽ nối sau)
         const cost = areaCm2 * toCan * laminationSides * safeParseNumber(canObj.price);
         tienCan = Math.max(cost, safeParseNumber(canObj.minPrice));
         canDetail = `(${toCan.toLocaleString('vi-VN')} tờ × ${laminationSides} mặt × ${areaCm2.toLocaleString('vi-VN')}cm² × ${canObj.price}đ)`;
@@ -613,21 +502,33 @@ function HopMemCalculator() {
         : `(${totalImpressions.toLocaleString('vi-VN')} lượt × ${Math.round(pricePerHit).toLocaleString('vi-VN')}đ)`;
     }
 
-    // 4. Tiền gia công
-    const giaCongRule = getGiaCongRule();
-    const giaCongDonGia = giaCongRule.donGia;
-    const soLuongGiaCong = qty + 50;
-    const tienGiaCongTinhTheoSL = soLuongGiaCong * giaCongDonGia;
-    const tienGiaCong = Math.max(tienGiaCongTinhTheoSL, giaCongRule.minPrice);
-    const isMinGiaCongApplied = giaCongRule.minPrice > 0 && tienGiaCong === giaCongRule.minPrice;
-    const giaCongDetail = giaCongDonGia > 0
-      ? isMinGiaCongApplied
-        ? `(${soLuongGiaCong.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ, áp tối thiểu ${Math.round(giaCongRule.minPrice).toLocaleString('vi-VN')}đ${giaCongRule.ruleLabel ? ` - ${giaCongRule.ruleLabel}` : ''})`
-        : `(${soLuongGiaCong.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ${giaCongRule.ruleLabel ? ` - ${giaCongRule.ruleLabel}` : ''})`
-      : '(Không tìm thấy đơn giá gia công)';
+    // 4. Tiền gia công (bảng Sheet Gia công túi theo Hông Y + số mảnh; tối thiểu / đơn hàng)
+    const giaCongUnit = computeTuiGiayGiaCongUnit({
+      soManh,
+      hongYcm: boxDepth,
+      paperType,
+      quai,
+      finishingDatabase,
+    });
+    const giaCongDonGia = giaCongUnit.donGia;
+    const tienGiaCongTinhTheoSL = qty * giaCongDonGia;
+    const tienGiaCong = Math.max(tienGiaCongTinhTheoSL, giaCongUnit.minOrder);
+    const isMinGiaCongApplied = tienGiaCongTinhTheoSL < giaCongUnit.minOrder;
+    const phuPhiBits = [];
+    if (giaCongUnit.isKraftPaper) phuPhiBits.push('+500đ giấy Kraft');
+    if (giaCongUnit.quaiPremium) phuPhiBits.push('+500đ quai (Dây đẹp/Lụa)');
+    const phuPhiText = phuPhiBits.length ? `; ${phuPhiBits.join('; ')}` : '';
+    const giaCongDetail = isMinGiaCongApplied
+      ? `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText}; áp tối thiểu đơn hàng ${giaCongUnit.minOrder.toLocaleString('vi-VN')}đ)`
+      : `(${qty.toLocaleString('vi-VN')} chiếc × ${Math.round(giaCongDonGia).toLocaleString('vi-VN')}đ; ${giaCongUnit.tierLabel}${phuPhiText})`;
 
-    // 5. Tiền khuôn bế
-    const tienKhuonBe = safeParseNumber(dieCost);
+    // 5. Tiền khuôn bế (tra Sheet GiaCong theo thể tích X×Y×Z + số mảnh)
+    const { size: khuonSizeLabel, vol: khuonVol } = classifyTuiVolume(boxWidth, boxDepth, boxHeight);
+    const khuonBeRow = findTuiGiayKhuonBeRow(finishingDatabase, soManh, khuonSizeLabel);
+    const tienKhuonBe = khuonBeRow ? safeParseNumber(khuonBeRow.price) : 0;
+    const khuonBeDetail = khuonBeRow
+      ? `(${khuonBeRow.item}; V=${Math.round(khuonVol).toLocaleString('vi-VN')} cm³ → ${khuonSizeLabel})`
+      : `(Không tìm thấy dòng khuôn bế túi trên Sheet GiaCong; V=${Math.round(khuonVol).toLocaleString('vi-VN')} cm³ → ${khuonSizeLabel})`;
 
     // 6. Tiền vận chuyển
     const tienVanChuyen = safeParseNumber(shippingCost); 
@@ -637,12 +538,13 @@ function HopMemCalculator() {
     const donGiaSP = giaBan / qty;
 
     setResult({
-      itemsPerSheet, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
+      itemsPerSheet, piecesPerBag, sheetsNeeded: parentSheetsNeeded, dynamicSpoilage,
       totalWeightKg, pricePerKg,
+      matTui, soManh, quai,
       costs: {
         tienGiay, tienXaLo, tienKem, tienIn, tienCan, foilDieCost, foilCost, embossDieCost, embossCost, tienGiaCong, tienKhuonBe, tienVanChuyen,
         giaSanXuat, giaBan, donGiaSP, markup,
-        soKem, giaKem, quaLuotMoiKem, giaLuot, canDetail, foilDieDetail, foilDetail, embossDieDetail, embossDetail, giaCongDetail
+        soKem, giaKem, quaLuotMoiKem, giaLuot, sooBaiIn, canDetail, foilDieDetail, foilDetail, embossDieDetail, embossDetail, giaCongDetail, khuonBeDetail
       }
     });
 
@@ -654,8 +556,8 @@ function HopMemCalculator() {
       {/* KHU VỰC TRÁI: FORM NHẬP LIỆU */}
       <div className="xl:col-span-3 bg-white p-6 rounded-2xl shadow-sm border border-slate-200 space-y-6 xl:overflow-y-auto custom-scrollbar xl:h-full">
         <h2 className="text-lg font-semibold flex items-center space-x-2 border-b pb-3 shrink-0">
-          <Box size={20} className="text-orange-500"/>
-          <span>Thông Số Hộp Mềm</span>
+          <ShoppingBag size={20} className="text-orange-500"/>
+          <span>Thông số Túi giấy</span>
         </h2>
 
         {/* 1. THÔNG TIN CHUNG */}
@@ -666,10 +568,7 @@ function HopMemCalculator() {
             <input type="text" className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={productName} onChange={(e) => setProductName(e.target.value)} />
           </div>
           
-          <div
-            ref={boxDimensionsRef}
-            className={fieldClass('bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2', 'boxDimensions')}
-          >
+          <div ref={boxDimensionsRef} className={fieldClass('bg-orange-50 p-3 rounded-lg border border-orange-100 space-y-3 mt-2', 'boxDimensions')}>
             <label className="text-xs font-bold text-orange-800 uppercase tracking-wider block">Kích thước thành phẩm (cm)</label>
             <div className="grid grid-cols-3 gap-3">
               <div className="space-y-1">
@@ -691,19 +590,45 @@ function HopMemCalculator() {
             <Box3DViewer width={boxWidth} depth={boxDepth} height={boxHeight} />
           </div>
 
-          <div className="grid grid-cols-2 gap-4">
-            <div ref={quantityRef} className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Số lượng hộp *</label>
-              <input type="number" className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700', 'quantity')} value={quantity} onChange={(e) => { setQuantity(e.target.value); clearFieldError('quantity'); }} />
-              {renderFieldError('quantity')}
+          <div ref={quantityRef} className="space-y-2">
+            <label className="text-sm font-medium text-slate-700">Số lượng túi *</label>
+            <input type="number" className={fieldClass('w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none font-semibold text-orange-700', 'quantity')} value={quantity} onChange={(e) => { setQuantity(e.target.value); clearFieldError('quantity'); }} />
+            {renderFieldError('quantity')}
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Gấp miệng (cm)</label>
+              <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={gapMiec} onChange={(e) => setGapMiec(e.target.value)} />
             </div>
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-slate-700">Loại hộp</label>
-              <select className="w-full p-2.5 bg-slate-50 border border-slate-300 rounded-lg focus:ring-2 focus:ring-orange-500 outline-none" value={boxType} onChange={(e) => setBoxType(e.target.value)}>
-                <option value="cai_2_dau">Hộp cài 2 đầu</option>
-                <option value="dan_2_dau">Hộp dán 2 đầu</option>
-                <option value="nap_cai_day_khoa">Hộp nắp cài đáy khoá</option>
-                <option value="nap_cai_day_moc">Nắp cài đáy móc</option>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Tai dán (cm)</label>
+              <input type="number" step="0.1" className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={taiDanStr} onChange={(e) => setTaiDanStr(e.target.value)} />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Mặt túi *</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={matTui} onChange={(e) => setMatTui(e.target.value)}>
+                <option value="giong_nhau">Giống nhau</option>
+                <option value="khac_nhau">Khác nhau</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Số mảnh</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={soManh} onChange={(e) => setSoManh(e.target.value)}>
+                <option value="1_manh">1 mảnh</option>
+                <option value="2_manh">2 mảnh</option>
+              </select>
+            </div>
+            <div className="space-y-1">
+              <label className="text-xs font-medium text-slate-600">Quai</label>
+              <select className="w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm" value={quai} onChange={(e) => setQuai(e.target.value)}>
+                <option value="day_du_thuong">Dây dù thường</option>
+                <option value="day_du_dep">Dây dù đẹp</option>
+                <option value="day_lua">Dây lụa</option>
+                <option value="quai_giay">Quai giấy</option>
               </select>
             </div>
           </div>
@@ -738,27 +663,6 @@ function HopMemCalculator() {
           </div>
 
 
-          <div ref={layoutRef} className="grid grid-cols-2 gap-3">
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát X</label>
-              <input type="number" min="1" className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm', 'layout')} value={cols} onChange={(e) => { setCols(e.target.value); clearFieldError('layout'); }}/>
-            </div>
-            <div className="space-y-1">
-              <label className="text-xs font-medium text-slate-600">Số bát Y</label>
-              <input type="number" min="1" className={fieldClass('w-full p-2 bg-slate-50 border border-slate-300 rounded outline-none focus:ring-2 focus:ring-orange-500 text-sm', 'layout')} value={rows} onChange={(e) => { setRows(e.target.value); clearFieldError('layout'); }}/>
-            </div>
-            {fieldErrors.layout && <div className="col-span-2">{renderFieldError('layout')}</div>}
-          </div>
-
-          {(boxType === 'nap_cai_day_khoa' || boxType === 'nap_cai_day_moc') && (
-            <div className="pt-1">
-              <label className="flex items-center space-x-1.5 cursor-pointer group w-fit">
-                <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={daoTaiDan} onChange={(e) => { setDaoTaiDan(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
-                <span className="text-sm font-medium text-slate-700">Đảo tai dán</span>
-              </label>
-            </div>
-          )}
-
           <div className="space-y-1 pt-2">
             <label className="text-xs font-bold text-orange-800">Số đo cụm khuôn (cm)</label>
             <div className="w-full p-2.5 bg-orange-100 border border-orange-200 rounded-lg text-sm font-bold text-orange-900 text-center shadow-inner">
@@ -770,7 +674,7 @@ function HopMemCalculator() {
           
 
 
-          {/* CHỌN KHỔ GIẤY IN HỘP MỀM */}
+          {/* CHỌN KHỔ GIẤY IN */}
           <div ref={parentSizeRef} className="space-y-2 pt-1 border-t border-slate-100">
             <label className="text-sm font-medium text-slate-700 flex justify-between items-center">
               <span>Khổ giấy in (Nguyên khổ) *</span>
@@ -794,10 +698,7 @@ function HopMemCalculator() {
           </div>
           
           {parentSizeIdx === PARENT_PAPER_SIZES.length && (
-            <div
-              ref={customParentSizeRef}
-              className={fieldClass('grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 mt-2', 'customParentSize')}
-            >
+            <div ref={customParentSizeRef} className={fieldClass('grid grid-cols-2 gap-4 bg-emerald-50 p-2.5 rounded-lg border border-emerald-100 mt-2', 'customParentSize')}>
               <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Ngang (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentW} onChange={(e) => { setCustomParentW(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
               <div className="space-y-1"><label className="text-xs font-medium text-slate-600">Cao (cm)</label><input type="number" step="0.1" className={fieldClass('w-full p-2 border border-slate-300 rounded outline-none', 'customParentSize')} value={customParentH} onChange={(e) => { setCustomParentH(e.target.value); clearFieldError('customParentSize', 'parentSize', 'selectedPrinter'); }}/></div>
               {fieldErrors.customParentSize && <div className="col-span-2">{renderFieldError('customParentSize')}</div>}
@@ -831,16 +732,8 @@ function HopMemCalculator() {
 
           <div className="flex flex-wrap gap-x-5 gap-y-2 pt-2 border-t border-slate-100">
             <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonSong} onChange={(e) => { setMuonSong(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
-              <span className="text-sm font-medium text-slate-700">Mượn sông</span>
-            </label>
-            <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => { setMuonNhip(e.target.checked); clearFieldError('parentSize', 'layout'); }} />
+              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={muonNhip} onChange={(e) => { setMuonNhip(e.target.checked); clearFieldError('parentSize'); }} />
               <span className="text-sm font-medium text-slate-700">Mượn nhíp</span>
-            </label>
-            <label className="flex items-center space-x-1.5 cursor-pointer group">
-              <input type="checkbox" className="w-4 h-4 rounded text-orange-600 focus:ring-orange-500" checked={allowMixed} onChange={(e) => setAllowMixed(e.target.checked)} />
-              <span className="text-sm font-medium text-slate-700">Xếp phối hợp (L)</span>
             </label>
           </div>
         </div>
@@ -926,7 +819,7 @@ function HopMemCalculator() {
           <div className="space-y-3">
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Tiền khuôn bế (VNĐ)</label>
-              <input type="number" className="w-1/2 p-2 bg-slate-50 border border-slate-300 rounded outline-none text-sm text-right font-medium" value={dieCost} onChange={(e) => setDieCost(Number(e.target.value))} />
+              <span className="text-sm text-slate-500 italic">Tự động tra bảng GiaCong</span>
             </div>
             <div className="flex items-center justify-between">
               <label className="text-sm font-medium text-slate-700">Vận chuyển (VNĐ)</label>
@@ -945,7 +838,7 @@ function HopMemCalculator() {
           onClick={handleCalculate} 
           className="w-full py-3 bg-orange-600 hover:bg-orange-700 text-white font-medium rounded-xl transition-colors flex justify-center items-center space-x-2 shadow-sm mt-4 shrink-0"
         >
-          <Maximize size={18} /><span>Tính toán & Phân trang hộp</span>
+          <Maximize size={18} /><span>Tính toán & Phân trang túi</span>
         </button>
       </div>
 
@@ -960,8 +853,8 @@ function HopMemCalculator() {
         {!(isCalculated || hasValidDimensions) ? (
           <div className="bg-white border border-slate-200 p-10 rounded-2xl flex flex-col items-center justify-center text-slate-400 h-full min-h-[400px] shrink-0">
             <Box size={48} className="mb-4 opacity-50 text-orange-400"/>
-            <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Hộp mềm</p>
-            <p className="text-sm mt-1">Nhập đầy đủ kích thước hộp để tự động xem bản vẽ kỹ thuật.</p>
+            <p className="font-medium text-slate-600 text-lg">Hệ thống tính giá Túi giấy</p>
+            <p className="text-sm mt-1">Nhập đầy đủ kích thước túi để tự động xem bản vẽ kỹ thuật.</p>
           </div>
         ) : (
           <>
@@ -969,10 +862,18 @@ function HopMemCalculator() {
               <h2 className="text-lg font-semibold mb-2 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Bản vẽ kỹ thuật (Flat Layout)</span>
               </h2>
-              <FlatLayoutViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} hopMemDatabase={hopMemDatabase} />
+              <TuiGiayFlatLayoutViewer
+                width={boxWidth}
+                depth={boxDepth}
+                height={boxHeight}
+                gapMiec={gapMiec}
+                taiDan={taiDanStr}
+                soManh={soManh}
+                matTui={matTui}
+              />
               
               <h2 className="text-lg font-semibold mb-2 mt-8 text-slate-800 border-b pb-2 flex justify-between items-center">
-                <span>Sơ đồ bình bản khuôn bế ({cols} ngang x {rows} dọc)</span>
+                <span>Sơ đồ bình bản khuôn bế (1 bát / tờ)</span>
                 <button
                   onClick={() => setIsZoomModalOpen(true)}
                   className="text-slate-500 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 p-1.5 px-3 rounded-lg transition-colors flex items-center gap-1 text-sm font-medium"
@@ -981,16 +882,60 @@ function HopMemCalculator() {
                   <ZoomIn size={16} /> <span className="hidden md:inline">Phóng to</span>
                 </button>
               </h2>
-              <BoxImpositionViewer boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} parentW={currentPaperSize.w} parentH={currentPaperSize.h} />
+              <TuiGiayImpositionViewer
+                width={boxWidth}
+                depth={boxDepth}
+                height={boxHeight}
+                gapMiec={gapMiec}
+                taiDan={taiDanStr}
+                soManh={soManh}
+                cols={cols}
+                rows={rows}
+                muonSong={false}
+                muonNhip={muonNhip}
+                parentW={currentPaperSize.w}
+                parentH={currentPaperSize.h}
+              />
             </div>
 
             {result && (
               <>
+              <QuoteSaveForm
+                quote={{
+                  productCategory: 'Túi giấy',
+                  productName,
+                  totalAmount: Math.round(result.costs.giaBan),
+                  specifications: {
+                    quantity,
+                    dimensions: {
+                      width: boxWidth,
+                      depth: boxDepth,
+                      height: boxHeight,
+                    },
+                    matTui,
+                    soManh,
+                    quai,
+                    paperType,
+                    paperGsm,
+                    printColors,
+                    lamination,
+                    hasFoil,
+                    foilLength,
+                    foilWidth,
+                    hasEmboss,
+                    embossLength,
+                    embossWidth,
+                    markup,
+                    result,
+                  },
+                }}
+              />
+
               <div className="grid grid-cols-2 xl:grid-cols-4 gap-4 shrink-0">
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
-                  <span className="text-slate-500 text-sm font-medium mb-1">Số bát (SP/Tờ)</span>
-                  <span className="text-3xl font-bold text-blue-600">{result.itemsPerSheet}</span>
-                  <span className="text-xs text-slate-400 mt-1">{cols} cột × {rows} hàng</span>
+                  <span className="text-slate-500 text-sm font-medium mb-1">Số tờ / túi</span>
+                  <span className="text-3xl font-bold text-blue-600">{result.piecesPerBag}</span>
+                  <span className="text-xs text-slate-400 mt-1">{result.piecesPerBag === 2 ? '2 mảnh — 2 tờ in' : '1 mảnh — 1 tờ in'}</span>
                 </div>
                 
                 <div className="bg-white p-4 rounded-2xl shadow-sm border border-slate-200 flex flex-col justify-center items-center text-center">
@@ -1042,7 +987,11 @@ function HopMemCalculator() {
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
                         <span>3. Tiền xuất kẽm</span>
-                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">({result.costs.soKem} kẽm × {result.costs.giaKem.toLocaleString('vi-VN')}đ)</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">
+                          {result.costs.sooBaiIn === 2
+                            ? `(${result.costs.soKem} kẽm × ${result.costs.giaKem.toLocaleString('vi-VN')}đ) × 2 bài in`
+                            : `(${result.costs.soKem} kẽm × ${result.costs.giaKem.toLocaleString('vi-VN')}đ)`}
+                        </span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKem).toLocaleString('vi-VN')} đ</span>
                     </div>
@@ -1051,7 +1000,13 @@ function HopMemCalculator() {
                       <div className="pr-4 text-slate-600">
                         <span>4. Tiền công in</span>
                         <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">
-                          ({result.costs.quaLuotMoiKem > 0 ? `${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ` : 'Miễn phí ≤ 1.000 lượt/kẽm'})
+                          {result.costs.sooBaiIn === 2
+                            ? result.costs.quaLuotMoiKem > 0
+                              ? `(${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ) × 2 bài in`
+                              : '(Miễn phí ≤ 1.000 lượt/kẽm) × 2 bài in'
+                            : result.costs.quaLuotMoiKem > 0
+                              ? `(${result.costs.quaLuotMoiKem.toLocaleString('vi-VN')} lượt quá × ${result.costs.soKem} kẽm × ${result.costs.giaLuot.toLocaleString('vi-VN')}đ)`
+                              : '(Miễn phí ≤ 1.000 lượt/kẽm)'}
                         </span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienIn).toLocaleString('vi-VN')} đ</span>
@@ -1116,6 +1071,7 @@ function HopMemCalculator() {
                     <div className="flex justify-between items-start text-sm py-1.5">
                       <div className="pr-4 text-slate-600">
                         <span>11. Tiền khuôn bế:</span>
+                        <span className="text-[11px] text-slate-400 ml-1 leading-relaxed inline-block">{result.costs.khuonBeDetail}</span>
                       </div>
                       <span className="font-medium text-slate-800 whitespace-nowrap">{Math.round(result.costs.tienKhuonBe).toLocaleString('vi-VN')} đ</span>
                     </div>
@@ -1139,7 +1095,7 @@ function HopMemCalculator() {
                       </div>
                       <div className="text-right">
                         <span className="font-bold text-2xl text-orange-700 block">{Math.round(result.costs.giaBan).toLocaleString('vi-VN')} đ</span>
-                        <span className="text-sm font-semibold text-orange-600">~ {Math.round(result.costs.donGiaSP).toLocaleString('vi-VN')} đ/Hộp</span>
+                        <span className="text-sm font-semibold text-orange-600">~ {Math.round(result.costs.donGiaSP).toLocaleString('vi-VN')} đ/Túi</span>
                       </div>
                     </div>
                   </div>
@@ -1163,11 +1119,19 @@ function HopMemCalculator() {
                   </div>
                   <div className="flex-1 overflow-auto p-4 md:p-8 bg-[#f8f9fa] flex items-center justify-center custom-scrollbar">
                     <div className="w-full max-w-full">
-                      <BoxImpositionViewer 
-                        boxType={boxType} width={boxWidth} depth={boxDepth} height={boxHeight} 
-                        cols={cols} rows={rows} hopMemDatabase={hopMemDatabase} 
-                        muonSong={muonSong} muonNhip={muonNhip} daoTaiDan={daoTaiDan} 
-                        parentW={currentPaperSize.w} parentH={currentPaperSize.h}
+                      <TuiGiayImpositionViewer
+                        width={boxWidth}
+                        depth={boxDepth}
+                        height={boxHeight}
+                        gapMiec={gapMiec}
+                        taiDan={taiDanStr}
+                        soManh={soManh}
+                        cols={cols}
+                        rows={rows}
+                        muonSong={false}
+                        muonNhip={muonNhip}
+                        parentW={currentPaperSize.w}
+                        parentH={currentPaperSize.h}
                       />
                     </div>
                   </div>
@@ -1182,4 +1146,4 @@ function HopMemCalculator() {
 }
 
 
-export default HopMemCalculator;
+export default TuiGiayCalculator;

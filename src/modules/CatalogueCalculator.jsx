@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AlertCircle, BookOpen, Layers, Maximize, Printer, RefreshCw } from 'lucide-react';
 import { BINDING_TYPES, DEFAULT_GAP_CM, DEFAULT_GRIPPER_CM, KHO_THIEU_SIZES, LAMINATION_TYPES, MARKUP_RATES, PARENT_PAPER_SIZES, PRINT_MARGIN_CM, PRODUCT_SIZES, DEFAULT_MARKUP } from '../constants/pricingConstants';
 import CatalogueSignatureCanvas from '../components/viewers/CatalogueSignatureCanvas';
+import QuoteSaveForm from '../components/QuoteSaveForm';
 import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
@@ -1072,6 +1073,37 @@ function CatalogueCalculator() {
           <div className="sticky top-0 z-20 bg-red-50 border border-red-200 text-red-700 p-6 rounded-2xl flex items-center space-x-3 shrink-0 shadow-sm"><AlertCircle size={24} /><span className="font-medium">{error}</span></div>
         ) : result ? (
           <>
+            <QuoteSaveForm
+              quote={{
+                productCategory: 'Catalogue',
+                productName,
+                totalAmount: Math.round(result.costs.giaBan),
+                specifications: {
+                  quantity,
+                  productSize: productTypeIdx === PRODUCT_SIZES.length - 1 ? `${customW} x ${customH} cm` : PRODUCT_SIZES[productTypeIdx]?.label,
+                  totalPages,
+                  bindingType,
+                  isCombinedPrint,
+                  cover: {
+                    paperType: coverPaperType,
+                    paperGsm: coverPaperGsm,
+                    printColors: coverPrintColors,
+                    printSides: coverPrintSides,
+                    lamination: coverLamination,
+                  },
+                  inner: isCombinedPrint ? null : {
+                    paperType: innerPaperType,
+                    paperGsm: innerPaperGsm,
+                    printColors: innerPrintColors,
+                    printSides: innerPrintSides,
+                    lamination: innerLamination,
+                  },
+                  markup,
+                  result,
+                },
+              }}
+            />
+
             <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200 flex flex-col shrink-0">
               <h2 className="text-lg font-semibold mb-4 text-slate-800 border-b pb-2 flex justify-between items-center">
                 <span>Sơ đồ tay sách & Lệnh in</span>
