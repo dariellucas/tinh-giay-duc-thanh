@@ -1,3 +1,5 @@
+import { GOOGLE_SHEETS_API_URL } from '../constants/pricingConstants';
+
 export const QUOTE_HISTORY_REFRESH_EVENT = 'quote-history:refresh';
 
 const DEFAULT_LIMIT = 100;
@@ -5,7 +7,7 @@ const DEFAULT_LIMIT = 100;
 function getAppsScriptUrl() {
   const viteUrl = typeof import.meta !== 'undefined' ? import.meta.env?.VITE_APPS_SCRIPT_URL : '';
   const craUrl = typeof process !== 'undefined' ? process.env?.REACT_APP_APPS_SCRIPT_URL : '';
-  return viteUrl || craUrl || '';
+  return viteUrl || craUrl || GOOGLE_SHEETS_API_URL || '';
 }
 
 function buildQuotesUrl({ limit, offset, search, category }) {

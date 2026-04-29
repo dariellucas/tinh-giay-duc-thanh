@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, History, Loader2, RefreshCw, Search } from 'lucide-react';
-import { fetchQuotes, QUOTE_HISTORY_REFRESH_EVENT } from '../services/quoteService';
+import QuoteDetail from './QuoteDetail';
+import { fetchQuotes, QUOTE_HISTORY_REFRESH_EVENT, saveQuote } from '../services/quoteService';
 import { useDebounce } from '../hooks/useDebounce';
 
 const PAGE_SIZE = 100;
@@ -47,6 +48,7 @@ function QuoteHistory() {
   const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState('');
   const [hasMore, setHasMore] = useState(false);
+  const [selectedQuote, setSelectedQuote] = useState(null);
   const debouncedSearch = useDebounce(search, 350);
 
   const categories = useMemo(() => {
@@ -102,6 +104,24 @@ function QuoteHistory() {
 
   const handleLoadMore = () => {
     loadQuotes({ nextOffset: offset, append: true });
+  };
+
+  const handleDuplicateQuote = async (quote) => {
+    const duplicatedQuote = await saveQuote({
+      productCategory: quote.productCategory,
+      productName: `${quote.productName || 'Báo giá'} (Bản sao)`,
+      specifications: quote.specifications || {},
+      totalAmount: quote.totalAmount,
+      customerName: quote.customerName,
+      quotedBy: quote.quotedBy,
+    });
+
+    await loadQuotes({ nextOffset: 0, append: false });
+    return duplicatedQuote;
+  };
+
+  const handleEditQuote = (quote) => {
+    window.dispatchEvent(new CustomEvent('quote-history:edit-requested', { detail: quote }));
   };
 
   return (
@@ -197,7 +217,7 @@ function QuoteHistory() {
                       <td className="px-4 py-3 text-center">
                         <button
                           type="button"
-                          onClick={() => console.log('Quote detail:', quote)}
+                          onClick={() => setSelectedQuote(quote)}
                           className="rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-semibold text-blue-700 transition-colors hover:bg-blue-100"
                         >
                           Xem chi tiết
@@ -227,6 +247,12 @@ function QuoteHistory() {
           </div>
         )}
       </div>
+      <QuoteDetail
+        quote={selectedQuote}
+        onClose={() => setSelectedQuote(null)}
+        onDuplicate={handleDuplicateQuote}
+        onEdit={handleEditQuote}
+      />
     </div>
   );
 }
