@@ -6,7 +6,6 @@ import {
 } from '../constants/pricingConstants';
 import { getAuthToken } from './authService';
 import { buildAppsScriptUrl } from './appScriptConfig';
-import { debugLog } from '../utils/debugLog';
 
 const CACHE_KEY = 'pricingDataCacheV1';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -87,14 +86,6 @@ async function fetchWithTimeout(url) {
 export async function loadPricingData() {
   try {
     const url = buildAppsScriptUrl('getPricingData');
-    // #region agent log
-    debugLog({
-      hypothesisId: 'H3,H4',
-      location: 'src/services/pricingService.js:loadPricingData',
-      message: 'Pricing data request prepared',
-      data: { hasUrl: Boolean(url), action: url ? url.searchParams.get('action') : '', hasAuthToken: Boolean(getAuthToken()) },
-    });
-    // #endregion
     if (!url) throw new Error('Thiếu URL Apps Script. Đang dùng giá dự phòng.');
     url.searchParams.set('authToken', getAuthToken());
 
@@ -131,14 +122,6 @@ export async function loadPricingData() {
     saveCache(payload);
     return payload;
   } catch (networkError) {
-    // #region agent log
-    debugLog({
-      hypothesisId: 'H4',
-      location: 'src/services/pricingService.js:loadPricingData',
-      message: 'Pricing data load failed or fell back',
-      data: { errorName: networkError?.name || '', errorMessage: networkError?.message || '' },
-    });
-    // #endregion
     const cached = readValidCache();
     if (cached) {
       return {

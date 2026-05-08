@@ -1,11 +1,10 @@
-import React, { Component, Suspense, lazy, useState } from 'react';
-import { BookOpen, Book, Box, FileText, History, Layout, LogOut, Mail, ShoppingBag, StickyNote, UserRound } from 'lucide-react';
+import React, { Suspense, lazy, useState } from 'react';
+import { BookOpen, Book, Box, FileText, History, Layout, LogOut, Mail, ShoppingBag, StickyNote } from 'lucide-react';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PricingDataProvider, usePricingDataContext } from './context/PricingDataContext';
 import { DecalCalculator, PhongBiCalculator, VoCalculator } from './modules/PlaceholderCalculators';
-import { debugLog } from './utils/debugLog';
 
 const ToRoiCalculator = lazy(() => import('./modules/ToRoiCalculator'));
 const CatalogueCalculator = lazy(() => import('./modules/CatalogueCalculator'));
@@ -13,64 +12,11 @@ const HopMemCalculator = lazy(() => import('./modules/HopMemCalculator'));
 const TuiGiayCalculator = lazy(() => import('./modules/TuiGiayCalculator'));
 const QuoteHistory = lazy(() => import('./components/QuoteHistory'));
 
-class RootErrorBoundary extends Component {
-  constructor(props) {
-    super(props);
-    this.state = { error: null };
-  }
-
-  static getDerivedStateFromError(error) {
-    return { error };
-  }
-
-  componentDidCatch(error, errorInfo) {
-    // #region agent log
-    debugLog({
-      hypothesisId: 'H1,H5',
-      location: 'src/App.jsx:RootErrorBoundary',
-      message: 'Root render error captured',
-      data: {
-        errorName: error?.name || '',
-        errorMessage: error?.message || '',
-        componentStack: errorInfo?.componentStack || '',
-      },
-    });
-    // #endregion
-  }
-
-  render() {
-    if (this.state.error) {
-      return (
-        <div className="min-h-screen bg-red-50 p-6 font-sans text-red-900">
-          <div className="mx-auto max-w-3xl rounded-2xl border border-red-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-bold uppercase tracking-wide text-red-600">Lỗi khởi động ứng dụng</p>
-            <h1 className="mt-2 text-xl font-bold">Ứng dụng gặp lỗi khi render.</h1>
-            <pre className="mt-4 overflow-auto rounded-xl bg-red-950 p-4 text-sm text-red-50">
-              {this.state.error?.stack || this.state.error?.message || String(this.state.error)}
-            </pre>
-          </div>
-        </div>
-      );
-    }
-
-    return this.props.children;
-  }
-}
-
 function AppShell() {
   const [activeTab, setActiveTab] = useState('toroi');
   const [editingQuote, setEditingQuote] = useState(null);
   const { user, logout } = useAuth();
   const { priceLoadError } = usePricingDataContext();
-
-  // #region agent log
-  debugLog({
-    hypothesisId: 'H5',
-    location: 'src/App.jsx:AppShell',
-    message: 'AppShell render reached',
-    data: { activeTab, hasUser: Boolean(user), role: user?.role || '', hasPriceLoadError: Boolean(priceLoadError) },
-  });
-  // #endregion
 
   const TABS = [
     { id: 'toroi', label: 'Tờ rời', icon: FileText },
@@ -156,7 +102,7 @@ function AppShell() {
         <div className="border-t border-slate-100 p-4">
           <div className="mb-3 flex items-center gap-3 rounded-xl bg-slate-50 p-3">
             <div className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-blue-700">
-              <UserRound size={18} />
+              <span className="text-sm font-bold">{(user?.displayName || user?.userName || 'U').charAt(0).toUpperCase()}</span>
             </div>
             <div className="min-w-0">
               <p className="truncate text-sm font-semibold text-slate-800">{user?.displayName || user?.userName || 'Người dùng'}</p>
@@ -231,15 +177,6 @@ function AppShell() {
 function AuthenticatedApp() {
   const { isAuthenticated, isCheckingSession } = useAuth();
 
-  // #region agent log
-  debugLog({
-    hypothesisId: 'H1,H2,H5',
-    location: 'src/App.jsx:AuthenticatedApp',
-    message: 'AuthenticatedApp render state',
-    data: { isAuthenticated, isCheckingSession },
-  });
-  // #endregion
-
   if (isCheckingSession) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50 font-sans text-sm font-semibold text-slate-500">
@@ -261,10 +198,8 @@ function AuthenticatedApp() {
 
 export default function App() {
   return (
-    <RootErrorBoundary>
-      <AuthProvider>
-        <AuthenticatedApp />
-      </AuthProvider>
-    </RootErrorBoundary>
+    <AuthProvider>
+      <AuthenticatedApp />
+    </AuthProvider>
   );
 }

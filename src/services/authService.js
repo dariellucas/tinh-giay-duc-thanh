@@ -1,5 +1,4 @@
 import { buildAppsScriptUrl } from './appScriptConfig';
-import { debugLog } from '../utils/debugLog';
 
 const AUTH_SESSION_KEY = 'ducThanhAuthSession';
 
@@ -63,25 +62,9 @@ export async function loginWithPassword({ userName, password }) {
 
 export async function verifyStoredSession() {
   const session = readStoredSession();
-  // #region agent log
-  debugLog({
-    hypothesisId: 'H2,H3',
-    location: 'src/services/authService.js:verifyStoredSession',
-    message: 'Stored session read',
-    data: { hasStoredSession: Boolean(session), hasToken: Boolean(session?.token), hasUser: Boolean(session?.user) },
-  });
-  // #endregion
   if (!session?.token) return null;
 
   const url = buildAppsScriptUrl('verifySession');
-  // #region agent log
-  debugLog({
-    hypothesisId: 'H3',
-    location: 'src/services/authService.js:verifyStoredSession',
-    message: 'Verify session URL built',
-    data: { hasUrl: Boolean(url), action: url ? url.searchParams.get('action') : '' },
-  });
-  // #endregion
   if (!url) return null;
   url.searchParams.set('authToken', session.token);
 
@@ -99,14 +82,6 @@ export async function verifyStoredSession() {
     writeStoredSession(verifiedSession);
     return verifiedSession;
   } catch (error) {
-    // #region agent log
-    debugLog({
-      hypothesisId: 'H2,H3',
-      location: 'src/services/authService.js:verifyStoredSession',
-      message: 'Verify session failed',
-      data: { errorName: error?.name || '', errorMessage: error?.message || '' },
-    });
-    // #endregion
     clearAuthSession();
     return null;
   }

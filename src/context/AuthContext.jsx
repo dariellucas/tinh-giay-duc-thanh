@@ -1,6 +1,5 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { clearAuthSession, getAuthSession, loginWithPassword, logoutSession, verifyStoredSession } from '../services/authService';
-import { debugLog } from '../utils/debugLog';
 
 const AuthContext = createContext(null);
 
@@ -12,26 +11,10 @@ export function AuthProvider({ children }) {
     let isMounted = true;
 
     async function verifySession() {
-      // #region agent log
-      debugLog({
-        hypothesisId: 'H2',
-        location: 'src/context/AuthContext.jsx:verifySession',
-        message: 'Auth session verification started',
-        data: {},
-      });
-      // #endregion
       const verifiedSession = await verifyStoredSession();
       if (!isMounted) return;
       setSession(verifiedSession);
       setIsCheckingSession(false);
-      // #region agent log
-      debugLog({
-        hypothesisId: 'H2',
-        location: 'src/context/AuthContext.jsx:verifySession',
-        message: 'Auth session verification completed',
-        data: { hasVerifiedSession: Boolean(verifiedSession), hasUser: Boolean(verifiedSession?.user) },
-      });
-      // #endregion
     }
 
     verifySession();
