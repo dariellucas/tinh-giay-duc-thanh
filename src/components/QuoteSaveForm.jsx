@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { AlertCircle, CheckCircle2, Save } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
 import { saveQuote, updateQuote } from '../services/quoteService';
 
 const QUOTE_AUTHOR_KEY = 'quoteAuthorName';
 
 function QuoteSaveForm({ quote, editingQuote }) {
+  const { user } = useAuth();
   const [customerName, setCustomerName] = useState('');
   const [quotedBy, setQuotedBy] = useState('');
   const [isSaving, setIsSaving] = useState(false);
@@ -13,8 +15,8 @@ function QuoteSaveForm({ quote, editingQuote }) {
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
-    setQuotedBy(localStorage.getItem(QUOTE_AUTHOR_KEY) || '');
-  }, []);
+    setQuotedBy(localStorage.getItem(QUOTE_AUTHOR_KEY) || user?.displayName || user?.userName || '');
+  }, [user]);
 
   useEffect(() => {
     if (!editingQuote) return;

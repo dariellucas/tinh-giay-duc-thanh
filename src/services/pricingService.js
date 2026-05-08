@@ -3,8 +3,10 @@ import {
   DEFAULT_FINISHING_DATA,
   DEFAULT_PAPER_DATA,
   DEFAULT_PRINTER_DATA,
-  GOOGLE_SHEETS_API_URL,
 } from '../constants/pricingConstants';
+import { getAuthToken } from './authService';
+import { buildAppsScriptUrl } from './appScriptConfig';
+import { debugLog } from '../utils/debugLog';
 
 const CACHE_KEY = 'pricingDataCacheV1';
 const CACHE_TTL_MS = 12 * 60 * 60 * 1000;
@@ -84,7 +86,19 @@ async function fetchWithTimeout(url) {
 
 export async function loadPricingData() {
   try {
-    const response = await fetchWithTimeout(GOOGLE_SHEETS_API_URL);
+    const url = buildAppsScriptUrl('getPricingData');
+    // #region agent log
+    debugLog({
+      hypothesisId: 'H3,H4',
+      location: 'src/services/pricingService.js:loadPricingData',
+      message: 'Pricing data request prepared',
+      data: { hasUrl: Boolean(url), action: url ? url.searchParams.get('action') : '', hasAuthToken: Boolean(getAuthToken()) },
+    });
+    // #endregion
+    if (!url) throw new Error('Thiếu URL Apps Script. Đang dùng giá dự phòng.');
+    url.searchParams.set('authToken', getAuthToken());
+
+    const response = await fetchWithTimeout(url.toString());
     const text = await response.text();
 
     if (text.trim().startsWith('<')) {
@@ -92,6 +106,9 @@ export async function loadPricingData() {
     }
 
     const json = JSON.parse(text);
+    if (json?.ok === false) {
+      throw new Error(json.error || 'Không lấy được dữ liệu. Đang dùng giá dự phòng.');
+    }
     const rawPapers = json.papers && json.printers ? json.papers : json.record || json;
     const rawPrinters = json.papers && json.printers ? json.printers : [];
     const rawFinishing = json.finishing || DEFAULT_FINISHING_DATA;
@@ -114,6 +131,14 @@ export async function loadPricingData() {
     saveCache(payload);
     return payload;
   } catch (networkError) {
+    // #region agent log
+    debugLog({
+      hypothesisId: 'H4',
+      location: 'src/services/pricingService.js:loadPricingData',
+      message: 'Pricing data load failed or fell back',
+      data: { errorName: networkError?.name || '', errorMessage: networkError?.message || '' },
+    });
+    // #endregion
     const cached = readValidCache();
     if (cached) {
       return {
