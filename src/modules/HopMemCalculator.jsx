@@ -127,6 +127,13 @@ function HopMemCalculator({ editingQuote, onFinishEditing }) {
     }
     if (specs.paperType) setPaperType(specs.paperType);
     if (specs.paperGsm) setPaperGsm(Number(specs.paperGsm));
+    if (specs.cols) setCols(String(specs.cols));
+    if (specs.rows) setRows(String(specs.rows));
+    if (typeof specs.daoTaiDan === 'boolean') setDaoTaiDan(specs.daoTaiDan);
+    if (typeof specs.muonSong === 'boolean') setMuonSong(specs.muonSong);
+    else if (specs.result?.gap !== undefined) setMuonSong(Number(specs.result.gap) === 0);
+    if (typeof specs.muonNhip === 'boolean') setMuonNhip(specs.muonNhip);
+    if (typeof specs.allowMixed === 'boolean') setAllowMixed(specs.allowMixed);
     if (specs.printColors) setPrintColors(Number(specs.printColors));
     if (specs.lamination) setLamination(specs.lamination);
     if (typeof specs.hasFoil === 'boolean') setHasFoil(specs.hasFoil);
@@ -136,6 +143,8 @@ function HopMemCalculator({ editingQuote, onFinishEditing }) {
     if (specs.embossLength !== undefined) setEmbossLength(String(specs.embossLength));
     if (specs.embossWidth !== undefined) setEmbossWidth(String(specs.embossWidth));
     if (specs.dieCost !== undefined) setDieCost(Number(specs.dieCost));
+    if (specs.shippingCost !== undefined) setShippingCost(Number(specs.shippingCost) || 0);
+    else if (specs.result?.costs?.tienVanChuyen !== undefined) setShippingCost(Number(specs.result.costs.tienVanChuyen) || 0);
     if (specs.markup) setMarkup(Number(specs.markup));
     if (specs.result) {
       setResult(specs.result);
@@ -1044,6 +1053,12 @@ function HopMemCalculator({ editingQuote, onFinishEditing }) {
                     },
                     paperType,
                     paperGsm,
+                    cols,
+                    rows,
+                    daoTaiDan,
+                    muonSong,
+                    muonNhip,
+                    allowMixed,
                     printColors,
                     lamination,
                     hasFoil,
@@ -1053,6 +1068,7 @@ function HopMemCalculator({ editingQuote, onFinishEditing }) {
                     embossLength,
                     embossWidth,
                     dieCost,
+                    shippingCost,
                     markup,
                     result,
                   },

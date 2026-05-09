@@ -179,6 +179,7 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
   const customParentSizeRef = useRef(null);
   const rollCutLengthRef = useRef(null);
   const selectedPrinterRef = useRef(null);
+  const restoredGapMiecRef = useRef(false);
   const activeEditingQuote = (() => {
     const category = String(editingQuote?.productCategory || '').toLowerCase();
     return editingQuote?.id && (category.includes('túi') || category.includes('tui')) ? editingQuote : null;
@@ -204,8 +205,14 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
     if (specs.matTui) setMatTui(specs.matTui);
     if (specs.soManh) setSoManh(specs.soManh);
     if (specs.quai) setQuai(specs.quai);
+    if (specs.gapMiec !== undefined) {
+      restoredGapMiecRef.current = true;
+      setGapMiec(String(specs.gapMiec));
+    }
+    if (specs.taiDan !== undefined) setTaiDanStr(String(specs.taiDan));
     if (specs.paperType) setPaperType(specs.paperType);
     if (specs.paperGsm) setPaperGsm(Number(specs.paperGsm));
+    if (typeof specs.muonNhip === 'boolean') setMuonNhip(specs.muonNhip);
     if (specs.printColors) setPrintColors(Number(specs.printColors));
     if (specs.lamination) setLamination(specs.lamination);
     if (typeof specs.hasFoil === 'boolean') setHasFoil(specs.hasFoil);
@@ -214,6 +221,8 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
     if (typeof specs.hasEmboss === 'boolean') setHasEmboss(specs.hasEmboss);
     if (specs.embossLength !== undefined) setEmbossLength(String(specs.embossLength));
     if (specs.embossWidth !== undefined) setEmbossWidth(String(specs.embossWidth));
+    if (specs.shippingCost !== undefined) setShippingCost(Number(specs.shippingCost) || 0);
+    else if (specs.result?.costs?.tienVanChuyen !== undefined) setShippingCost(Number(specs.result.costs.tienVanChuyen) || 0);
     if (specs.markup) setMarkup(Number(specs.markup));
     if (specs.result) {
       setResult(specs.result);
@@ -245,6 +254,10 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
   }, [availableRolls, rollWidth]);
 
   useEffect(() => {
+    if (restoredGapMiecRef.current) {
+      restoredGapMiecRef.current = false;
+      return;
+    }
     if (paperType.startsWith('Kraft')) setGapMiec('0');
     else setGapMiec('4');
   }, [paperType]);
@@ -959,8 +972,11 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
                     matTui,
                     soManh,
                     quai,
+                    gapMiec,
+                    taiDan: taiDanStr,
                     paperType,
                     paperGsm,
+                    muonNhip,
                     printColors,
                     lamination,
                     hasFoil,
@@ -969,6 +985,7 @@ function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
                     hasEmboss,
                     embossLength,
                     embossWidth,
+                    shippingCost,
                     markup,
                     result,
                   },

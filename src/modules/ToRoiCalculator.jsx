@@ -72,6 +72,14 @@ function ToRoiCalculator({ editingQuote, onFinishEditing }) {
       : null;
   })();
 
+  const getCurrentProductSizeLabel = () => {
+    if (productTypeIdx === PRODUCT_SIZES.length - 1) return `${customW} x ${customH} cm`;
+    const size = isKhoThieu && KHO_THIEU_SIZES[productTypeIdx] ? KHO_THIEU_SIZES[productTypeIdx] : PRODUCT_SIZES[productTypeIdx];
+    return size?.label;
+  };
+
+  const khoThieuSizeList = Object.values(KHO_THIEU_SIZES);
+
   useEffect(() => {
     if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
     const category = String(editingQuote.productCategory || '').toLowerCase();
@@ -90,9 +98,26 @@ function ToRoiCalculator({ editingQuote, onFinishEditing }) {
     if (specs.laminationSides) setLaminationSides(Number(specs.laminationSides));
     if (specs.foldingLines !== undefined) setFoldingLines(Number(specs.foldingLines));
     if (specs.markup) setMarkup(Number(specs.markup));
+    if (typeof specs.muonSong === 'boolean') setMuonSong(specs.muonSong);
+    else if (specs.result?.gap !== undefined) setMuonSong(Number(specs.result.gap) === 0);
+    if (typeof specs.muonNhip === 'boolean') setMuonNhip(specs.muonNhip);
+    else if (specs.result?.gripper !== undefined) setMuonNhip(Number(specs.result.gripper) === 0);
+    if (typeof specs.allowMixed === 'boolean') setAllowMixed(specs.allowMixed);
+    if (specs.shippingCost !== undefined) setShippingCost(Number(specs.shippingCost) || 0);
+    else if (specs.result?.costs?.tienVanChuyen !== undefined) setShippingCost(Number(specs.result.costs.tienVanChuyen) || 0);
+
+    const khoThieuSizeIndex = khoThieuSizeList.findIndex((item) => item.label === specs.productSize);
+    const resultSizeIndex = khoThieuSizeList.findIndex((item) => (
+      Number(item.w) === Number(specs.result?.productW) && Number(item.h) === Number(specs.result?.productH)
+    ));
+    const shouldUseKhoThieu = typeof specs.isKhoThieu === 'boolean'
+      ? specs.isKhoThieu
+      : khoThieuSizeIndex >= 0 || resultSizeIndex >= 0;
+    setIsKhoThieu(shouldUseKhoThieu);
 
     const productSizeIndex = PRODUCT_SIZES.findIndex((item) => item.label === specs.productSize);
     if (productSizeIndex >= 0) setProductTypeIdx(productSizeIndex);
+    else if (khoThieuSizeIndex >= 0) setProductTypeIdx(khoThieuSizeIndex);
     else if (specs.result?.productW && specs.result?.productH) {
       setProductTypeIdx(PRODUCT_SIZES.length - 1);
       setCustomW(String(specs.result.productW));
@@ -810,7 +835,8 @@ function ToRoiCalculator({ editingQuote, onFinishEditing }) {
                 totalAmount: Math.round(result.costs.giaBan),
                 specifications: {
                   quantity,
-                  productSize: productTypeIdx === PRODUCT_SIZES.length - 1 ? `${customW} x ${customH} cm` : PRODUCT_SIZES[productTypeIdx]?.label,
+                  productSize: getCurrentProductSizeLabel(),
+                  isKhoThieu,
                   paperType,
                   paperGsm,
                   printColors,
@@ -819,6 +845,10 @@ function ToRoiCalculator({ editingQuote, onFinishEditing }) {
                   lamination,
                   laminationSides,
                   foldingLines,
+                  muonSong,
+                  muonNhip,
+                  allowMixed,
+                  shippingCost,
                   markup,
                   result,
                 },

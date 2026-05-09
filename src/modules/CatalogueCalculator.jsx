@@ -87,6 +87,14 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
     return editingQuote?.id && category.includes('catalogue') ? editingQuote : null;
   })();
 
+  const getCurrentProductSizeLabel = () => {
+    if (productTypeIdx === PRODUCT_SIZES.length - 1) return `${customW} x ${customH} cm`;
+    const size = isKhoThieu && KHO_THIEU_SIZES[productTypeIdx] ? KHO_THIEU_SIZES[productTypeIdx] : PRODUCT_SIZES[productTypeIdx];
+    return size?.label;
+  };
+
+  const khoThieuSizeList = Object.values(KHO_THIEU_SIZES);
+
   useEffect(() => {
     if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
     if (editingQuote.productCategory && !String(editingQuote.productCategory).toLowerCase().includes('catalogue')) return;
@@ -98,10 +106,23 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
     if (specs.totalPages) setTotalPages(String(specs.totalPages));
     if (specs.bindingType) setBindingType(specs.bindingType);
     if (typeof specs.isCombinedPrint === 'boolean') setIsCombinedPrint(specs.isCombinedPrint);
+    if (specs.orientation) setOrientation(specs.orientation);
+    if (specs.shippingCost !== undefined) setShippingCost(Number(specs.shippingCost) || 0);
+    else if (specs.result?.costs?.tienVanChuyen !== undefined) setShippingCost(Number(specs.result.costs.tienVanChuyen) || 0);
     if (specs.markup) setMarkup(Number(specs.markup));
+
+    const khoThieuSizeIndex = khoThieuSizeList.findIndex((item) => item.label === specs.productSize);
+    const resultSizeIndex = khoThieuSizeList.findIndex((item) => (
+      Number(item.w) === Number(specs.result?.productW) && Number(item.h) === Number(specs.result?.productH)
+    ));
+    const shouldUseKhoThieu = typeof specs.isKhoThieu === 'boolean'
+      ? specs.isKhoThieu
+      : khoThieuSizeIndex >= 0 || resultSizeIndex >= 0;
+    setIsKhoThieu(shouldUseKhoThieu);
 
     const productSizeIndex = PRODUCT_SIZES.findIndex((item) => item.label === specs.productSize);
     if (productSizeIndex >= 0) setProductTypeIdx(productSizeIndex);
+    else if (khoThieuSizeIndex >= 0) setProductTypeIdx(khoThieuSizeIndex);
 
     if (specs.cover) {
       if (specs.cover.paperType) setCoverPaperType(specs.cover.paperType);
@@ -109,6 +130,8 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
       if (specs.cover.printColors) setCoverPrintColors(Number(specs.cover.printColors));
       if (specs.cover.printSides) setCoverPrintSides(Number(specs.cover.printSides));
       if (specs.cover.lamination) setCoverLamination(specs.cover.lamination);
+      if (specs.cover.laminationSides) setCoverLaminationSides(Number(specs.cover.laminationSides));
+      if (specs.cover.foil) setCoverFoil(specs.cover.foil);
     }
 
     if (specs.inner) {
@@ -117,6 +140,7 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
       if (specs.inner.printColors) setInnerPrintColors(Number(specs.inner.printColors));
       if (specs.inner.printSides) setInnerPrintSides(Number(specs.inner.printSides));
       if (specs.inner.lamination) setInnerLamination(specs.inner.lamination);
+      if (specs.inner.laminationSides) setInnerLaminationSides(Number(specs.inner.laminationSides));
     }
 
     if (specs.result) setResult(specs.result);
@@ -1124,16 +1148,21 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
                 totalAmount: Math.round(result.costs.giaBan),
                 specifications: {
                   quantity,
-                  productSize: productTypeIdx === PRODUCT_SIZES.length - 1 ? `${customW} x ${customH} cm` : PRODUCT_SIZES[productTypeIdx]?.label,
+                  productSize: getCurrentProductSizeLabel(),
+                  isKhoThieu,
+                  orientation,
                   totalPages,
                   bindingType,
                   isCombinedPrint,
+                  shippingCost,
                   cover: {
                     paperType: coverPaperType,
                     paperGsm: coverPaperGsm,
                     printColors: coverPrintColors,
                     printSides: coverPrintSides,
                     lamination: coverLamination,
+                    laminationSides: coverLaminationSides,
+                    foil: coverFoil,
                   },
                   inner: isCombinedPrint ? null : {
                     paperType: innerPaperType,
@@ -1141,6 +1170,7 @@ function CatalogueCalculator({ editingQuote, onFinishEditing }) {
                     printColors: innerPrintColors,
                     printSides: innerPrintSides,
                     lamination: innerLamination,
+                    laminationSides: innerLaminationSides,
                   },
                   markup,
                   result,
