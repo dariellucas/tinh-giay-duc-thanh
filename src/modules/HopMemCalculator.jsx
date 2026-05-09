@@ -8,7 +8,7 @@ import { useDebounce } from '../hooks/useDebounce';
 import { calculateEmbossCost, calculateFoilCost, filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function HopMemCalculator({ editingQuote }) {
+function HopMemCalculator({ editingQuote, onFinishEditing }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -79,6 +79,10 @@ function HopMemCalculator({ editingQuote }) {
   const rollCutLengthRef = useRef(null);
   const layoutRef = useRef(null);
   const selectedPrinterRef = useRef(null);
+  const activeEditingQuote = (() => {
+    const category = String(editingQuote?.productCategory || '').toLowerCase();
+    return editingQuote?.id && (category.includes('hộp') || category.includes('hop')) ? editingQuote : null;
+  })();
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
@@ -1024,7 +1028,8 @@ function HopMemCalculator({ editingQuote }) {
             {result && (
               <>
               <QuoteSaveForm
-                editingQuote={editingQuote}
+                editingQuote={activeEditingQuote}
+                onFinishEditing={onFinishEditing}
                 quote={{
                   productCategory: 'Hộp mềm',
                   productName,

@@ -5,7 +5,7 @@ export const QUOTE_HISTORY_REFRESH_EVENT = 'quote-history:refresh';
 
 const DEFAULT_LIMIT = 100;
 
-function buildQuotesUrl({ limit, offset, search, category }) {
+function buildQuotesUrl({ limit, offset, search, category, quotedBy }) {
   const url = buildAppsScriptUrl('getQuotes');
   if (!url) return '';
 
@@ -14,6 +14,7 @@ function buildQuotesUrl({ limit, offset, search, category }) {
   url.searchParams.set('authToken', getAuthToken());
   if (search) url.searchParams.set('search', search);
   if (category) url.searchParams.set('category', category);
+  if (quotedBy) url.searchParams.set('quotedBy', quotedBy);
   return url.toString();
 }
 
@@ -22,8 +23,8 @@ function buildQuoteMutationUrl(action) {
   return url ? url.toString() : '';
 }
 
-export async function fetchQuotes({ limit = DEFAULT_LIMIT, offset = 0, search = '', category = '' } = {}) {
-  const url = buildQuotesUrl({ limit, offset, search, category });
+export async function fetchQuotes({ limit = DEFAULT_LIMIT, offset = 0, search = '', category = '', quotedBy = '' } = {}) {
+  const url = buildQuotesUrl({ limit, offset, search, category, quotedBy });
   if (!url) {
     console.error('[CRITICAL] Missing API URL');
     return [];

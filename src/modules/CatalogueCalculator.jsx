@@ -7,7 +7,7 @@ import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function CatalogueCalculator({ editingQuote }) {
+function CatalogueCalculator({ editingQuote, onFinishEditing }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -82,6 +82,10 @@ function CatalogueCalculator({ editingQuote }) {
   const innerCustomParentSizeRef = useRef(null);
   const innerRollCutLengthRef = useRef(null);
   const innerPrinterRef = useRef(null);
+  const activeEditingQuote = (() => {
+    const category = String(editingQuote?.productCategory || '').toLowerCase();
+    return editingQuote?.id && category.includes('catalogue') ? editingQuote : null;
+  })();
 
   useEffect(() => {
     if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
@@ -1112,7 +1116,8 @@ function CatalogueCalculator({ editingQuote }) {
         ) : result ? (
           <>
             <QuoteSaveForm
-              editingQuote={editingQuote}
+              editingQuote={activeEditingQuote}
+              onFinishEditing={onFinishEditing}
               quote={{
                 productCategory: 'Catalogue',
                 productName,

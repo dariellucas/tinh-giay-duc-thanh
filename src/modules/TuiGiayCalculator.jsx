@@ -109,7 +109,7 @@ function computeTuiGiayGiaCongUnit({ soManh, hongYcm, paperType, quai, finishing
   };
 }
 
-function TuiGiayCalculator({ editingQuote }) {
+function TuiGiayCalculator({ editingQuote, onFinishEditing }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -179,6 +179,10 @@ function TuiGiayCalculator({ editingQuote }) {
   const customParentSizeRef = useRef(null);
   const rollCutLengthRef = useRef(null);
   const selectedPrinterRef = useRef(null);
+  const activeEditingQuote = (() => {
+    const category = String(editingQuote?.productCategory || '').toLowerCase();
+    return editingQuote?.id && (category.includes('túi') || category.includes('tui')) ? editingQuote : null;
+  })();
 
   // --- DERIVED DATA ---
   const availablePaperTypes = paperDatabase ? Object.keys(paperDatabase) : [];
@@ -939,7 +943,8 @@ function TuiGiayCalculator({ editingQuote }) {
             {result && (
               <>
               <QuoteSaveForm
-                editingQuote={editingQuote}
+                editingQuote={activeEditingQuote}
+                onFinishEditing={onFinishEditing}
                 quote={{
                   productCategory: 'Túi giấy',
                   productName,

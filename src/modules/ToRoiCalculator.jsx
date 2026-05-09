@@ -7,7 +7,7 @@ import { usePricingDataContext } from '../context/PricingDataContext';
 import { filterPrintersBySize, findFinishingByName } from '../utils/finishingUtils';
 import { calculatePaperCost, getSpoilageByQuantity, safeParseNumber } from '../utils/numberUtils';
 
-function ToRoiCalculator({ editingQuote }) {
+function ToRoiCalculator({ editingQuote, onFinishEditing }) {
   const {
     paperDatabase,
     printerDatabase,
@@ -65,6 +65,12 @@ function ToRoiCalculator({ editingQuote }) {
   const selectedPrinterRef = useRef(null);
 
   const MARGIN = PRINT_MARGIN_CM;
+  const activeEditingQuote = (() => {
+    const category = String(editingQuote?.productCategory || '').toLowerCase();
+    return editingQuote?.id && (category.includes('tờ') || category.includes('rời') || category.includes('to roi'))
+      ? editingQuote
+      : null;
+  })();
 
   useEffect(() => {
     if (!editingQuote?.id || appliedEditingQuoteIdRef.current === editingQuote.id) return;
@@ -796,7 +802,8 @@ function ToRoiCalculator({ editingQuote }) {
         ) : result ? (
           <>
             <QuoteSaveForm
-              editingQuote={editingQuote}
+              editingQuote={activeEditingQuote}
+              onFinishEditing={onFinishEditing}
               quote={{
                 productCategory: 'Tờ rời',
                 productName,

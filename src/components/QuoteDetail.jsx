@@ -210,7 +210,7 @@ function QuoteDrawingPreview({ specs, productCategory }) {
   return null;
 }
 
-function QuoteDetail({ quote, onClose, onDuplicate, onEdit }) {
+function QuoteDetail({ quote, onClose, onDuplicate, onEdit, canEdit = true }) {
   const [actionMessage, setActionMessage] = useState('');
   const [actionError, setActionError] = useState('');
   const [isDuplicating, setIsDuplicating] = useState(false);
@@ -238,6 +238,11 @@ function QuoteDetail({ quote, onClose, onDuplicate, onEdit }) {
   };
 
   const handleEdit = () => {
+    if (!canEdit) {
+      setActionError('Bạn chỉ được chỉnh sửa báo giá do chính mình tạo.');
+      setActionMessage('');
+      return;
+    }
     if (onEdit) {
       onEdit(quote);
       setActionMessage('Đã gửi yêu cầu chỉnh sửa báo giá.');
@@ -351,7 +356,8 @@ function QuoteDetail({ quote, onClose, onDuplicate, onEdit }) {
                   <button
                     type="button"
                     onClick={handleEdit}
-                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50"
+                    disabled={!canEdit}
+                    className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
                   >
                     <Edit3 size={16} />
                     <span>Chỉnh sửa báo giá</span>
@@ -361,7 +367,7 @@ function QuoteDetail({ quote, onClose, onDuplicate, onEdit }) {
                       <FileText size={14} />
                       Ghi chú
                     </div>
-                    Sao chép sẽ tạo một báo giá mới từ dữ liệu đang xem. Chỉnh sửa phát sự kiện để nối vào luồng chỉnh sửa calculator sau này.
+                    Sao chép sẽ tạo một báo giá mới từ dữ liệu đang xem. Chỉ người tạo báo giá mới được chỉnh sửa báo giá gốc.
                   </div>
                   {actionMessage && <p className="rounded-xl bg-emerald-50 p-3 text-sm font-semibold text-emerald-700">{actionMessage}</p>}
                   {actionError && <p className="rounded-xl bg-red-50 p-3 text-sm font-semibold text-red-600">{actionError}</p>}

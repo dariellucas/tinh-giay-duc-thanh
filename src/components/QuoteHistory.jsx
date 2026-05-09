@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, History, Loader2, RefreshCw, Search } from 'lucide-react';
+import { AlertCircle, ChevronRight, History, Loader2, RefreshCw, Search, User, Users } from 'lucide-react';
 import QuoteDetail from './QuoteDetail';
 import { fetchQuotes, QUOTE_HISTORY_REFRESH_EVENT, saveQuote } from '../services/quoteService';
+import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
 
 const PAGE_SIZE = 100;
@@ -25,6 +26,10 @@ function formatDateTime(value) {
   }).format(date);
 }
 
+function normalizeOwner(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
 function QuoteSkeleton() {
   return (
     <div className="space-y-3">
@@ -40,9 +45,12 @@ function QuoteSkeleton() {
 }
 
 function QuoteHistory({ onEditQuote }) {
+  const { user } = useAuth();
   const [quotes, setQuotes] = useState([]);
+  const [authorOptions, setAuthorOptions] = useState([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
+  const [quotedByFilter, setQuotedByFilter] = useState('');
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
@@ -56,6 +64,33 @@ function QuoteHistory({ onEditQuote }) {
     DEFAULT_PRODUCT_CATEGORIES.forEach((item) => uniqueCategories.add(item));
     return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b, 'vi'));
   }, [quotes]);
+
+  const authorCounts = useMemo(() => (
+    quotes.reduce((counts, quote) => {
+      const author = quote.quotedBy || 'Chưa xác định';
+      counts[author] = (counts[author] || 0) + 1;
+      return counts;
+    }, {})
+  ), [quotes]);
+
+  const authors = useMemo(() => {
+    const uniqueAuthors = new Set(authorOptions);
+    quotes.forEach((quote) => {
+      if (quote.quotedBy) uniqueAuthors.add(quote.quotedBy);
+    });
+    return Array.from(uniqueAuthors).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi'));
+  }, [authorOptions, quotes]);
+
+  const canEditQuote = useCallback((quote) => {
+    if (!quote || !user) return false;
+    const currentUserName = normalizeOwner(user.userName);
+    const currentDisplayName = normalizeOwner(user.displayName || user.userName);
+    const createdBy = normalizeOwner(quote.createdBy);
+    const quotedBy = normalizeOwner(quote.quotedBy);
+
+    if (createdBy) return createdBy === currentUserName;
+    return Boolean(quotedBy && (quotedBy === currentDisplayName || quotedBy === currentUserName));
+  }, [user]);
 
   const loadQuotes = useCallback(async ({ nextOffset = 0, append = false } = {}) => {
     setError('');
@@ -71,9 +106,17 @@ function QuoteHistory({ onEditQuote }) {
         offset: nextOffset,
         search: debouncedSearch.trim(),
         category,
+        quotedBy: quotedByFilter,
       });
 
       setQuotes((currentQuotes) => (append ? [...currentQuotes, ...data] : data));
+      setAuthorOptions((currentAuthors) => {
+        const nextAuthors = new Set(currentAuthors);
+        data.forEach((quote) => {
+          if (quote.quotedBy) nextAuthors.add(quote.quotedBy);
+        });
+        return Array.from(nextAuthors).sort((a, b) => a.localeCompare(b, 'vi'));
+      });
       setOffset(nextOffset + data.length);
       setHasMore(data.length === PAGE_SIZE);
     } catch (fetchError) {
@@ -83,7 +126,7 @@ function QuoteHistory({ onEditQuote }) {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [category, debouncedSearch]);
+  }, [category, debouncedSearch, quotedByFilter]);
 
   useEffect(() => {
     setOffset(0);
@@ -113,7 +156,8 @@ function QuoteHistory({ onEditQuote }) {
       specifications: quote.specifications || {},
       totalAmount: quote.totalAmount,
       customerName: quote.customerName,
-      quotedBy: quote.quotedBy,
+      quotedBy: user?.displayName || user?.userName || '',
+      createdBy: user?.userName || '',
     });
 
     await loadQuotes({ nextOffset: 0, append: false });
@@ -121,6 +165,10 @@ function QuoteHistory({ onEditQuote }) {
   };
 
   const handleEditQuote = (quote) => {
+    if (!canEditQuote(quote)) {
+      setError('Bạn chỉ được chỉnh sửa báo giá do chính mình tạo.');
+      return;
+    }
     if (onEditQuote) onEditQuote(quote);
     setSelectedQuote(null);
   };
@@ -171,7 +219,60 @@ function QuoteHistory({ onEditQuote }) {
         </div>
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+        <aside className="min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
+            <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-600">
+              <Users size={16} />
+              <span>Người báo giá</span>
+            </div>
+          </div>
+          <div className="h-full overflow-y-auto p-3 custom-scrollbar">
+            <button
+              type="button"
+              onClick={() => setQuotedByFilter('')}
+              className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                quotedByFilter === '' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+            >
+              <span className="flex items-center gap-2">
+                <ChevronRight size={14} className={quotedByFilter === '' ? 'text-blue-500' : 'text-slate-300'} />
+                Tất cả
+              </span>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{quotes.length}</span>
+            </button>
+
+            <div className="ml-3 border-l border-slate-200 pl-2">
+              {authors.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-400">Chưa có dữ liệu người báo giá.</div>
+              ) : (
+                authors.map((author) => {
+                  const isActive = quotedByFilter === author;
+                  return (
+                    <button
+                      key={author}
+                      type="button"
+                      onClick={() => setQuotedByFilter(author)}
+                      className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                        isActive ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <User size={14} className={isActive ? 'text-blue-500' : 'text-slate-400'} />
+                        <span className="truncate">{author}</span>
+                      </span>
+                      {authorCounts[author] ? (
+                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{authorCounts[author]}</span>
+                      ) : null}
+                    </button>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        </aside>
+
+        <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         {error ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center p-8 text-center">
             <AlertCircle size={44} className="mb-3 text-red-500" />
@@ -247,12 +348,14 @@ function QuoteHistory({ onEditQuote }) {
             </div>
           </div>
         )}
+        </div>
       </div>
       <QuoteDetail
         quote={selectedQuote}
         onClose={() => setSelectedQuote(null)}
         onDuplicate={handleDuplicateQuote}
         onEdit={handleEditQuote}
+        canEdit={selectedQuote ? canEditQuote(selectedQuote) : false}
       />
     </div>
   );

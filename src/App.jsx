@@ -29,17 +29,35 @@ function AppShell() {
     { id: 'quoteHistory', label: 'Lịch sử báo giá', icon: History },
   ];
 
+  const confirmCancelEditing = () => {
+    if (!editingQuote?.id) return true;
+    if (typeof window === 'undefined') return true;
+    return window.confirm('Bạn đang chỉnh sửa báo giá. Hủy chỉnh sửa và bỏ các thay đổi chưa lưu?');
+  };
+
+  const handleFinishEditing = ({ navigateToHistory = false } = {}) => {
+    setEditingQuote(null);
+    if (navigateToHistory) setActiveTab('quoteHistory');
+  };
+
+  const handleSwitchTab = (tabId) => {
+    if (tabId === activeTab) return;
+    if (!confirmCancelEditing()) return;
+    setActiveTab(tabId);
+    setEditingQuote(null);
+  };
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'toroi': return <ToRoiCalculator editingQuote={editingQuote} />;
-      case 'catalogue': return <CatalogueCalculator editingQuote={editingQuote} />;
+      case 'toroi': return <ToRoiCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
+      case 'catalogue': return <CatalogueCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
       case 'vo': return <VoCalculator />;
-      case 'hopmem': return <HopMemCalculator editingQuote={editingQuote} />;
-      case 'tuigiay': return <TuiGiayCalculator editingQuote={editingQuote} />;
+      case 'hopmem': return <HopMemCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
+      case 'tuigiay': return <TuiGiayCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
       case 'quoteHistory': return <QuoteHistory onEditQuote={handleEditQuote} />;
-      default: return <ToRoiCalculator />;
+      default: return <ToRoiCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
     }
   };
 
@@ -86,7 +104,7 @@ function AppShell() {
             return (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleSwitchTab(tab.id)}
                 className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium
                   ${isActive 
                     ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100/50' 
@@ -147,7 +165,7 @@ function AppShell() {
             <select
               id="mobile-tab-select"
               value={activeTab}
-              onChange={(e) => setActiveTab(e.target.value)}
+              onChange={(e) => handleSwitchTab(e.target.value)}
               className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 outline-none"
             >
               {TABS.map(tab => (
