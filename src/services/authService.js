@@ -105,3 +105,58 @@ export async function logoutSession(sessionToken) {
     // Local logout is enough for the user; server cache will expire automatically.
   }
 }
+
+export async function changePassword({ currentPassword, newPassword }) {
+  const url = buildAppsScriptUrl('changePassword');
+  if (!url) throw new Error('Thiếu URL Apps Script để đổi mật khẩu.');
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    redirect: 'follow',
+    body: JSON.stringify({
+      authToken: getAuthToken(),
+      currentPassword,
+      newPassword,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (!data.ok) {
+    throw new Error(data.error || 'Không đổi được mật khẩu.');
+  }
+
+  return data;
+}
+
+export async function createUserAccount({ userName, displayName, password, role, active = true }) {
+  const url = buildAppsScriptUrl('createUser');
+  if (!url) throw new Error('Thiếu URL Apps Script để tạo tài khoản.');
+
+  const response = await fetch(url.toString(), {
+    method: 'POST',
+    redirect: 'follow',
+    body: JSON.stringify({
+      authToken: getAuthToken(),
+      userName,
+      displayName,
+      password,
+      role,
+      active,
+    }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (!data.ok) {
+    throw new Error(data.error || 'Không tạo được tài khoản.');
+  }
+
+  return data.user;
+}

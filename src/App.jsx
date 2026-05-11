@@ -1,5 +1,6 @@
 import React, { Suspense, lazy, useState } from 'react';
 import { BookOpen, Book, Box, FileText, History, Layout, LogOut, Mail, ShoppingBag, StickyNote } from 'lucide-react';
+import AccountPanel from './components/AccountPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
@@ -15,6 +16,7 @@ const QuoteHistory = lazy(() => import('./components/QuoteHistory'));
 function AppShell() {
   const [activeTab, setActiveTab] = useState('toroi');
   const [editingQuote, setEditingQuote] = useState(null);
+  const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
   const { user, logout } = useAuth();
   const { priceLoadError } = usePricingDataContext();
 
@@ -129,6 +131,13 @@ function AppShell() {
           </div>
           <button
             type="button"
+            onClick={() => setIsAccountPanelOpen(true)}
+            className="mb-2 flex w-full items-center justify-center rounded-xl border border-blue-100 bg-blue-50 px-4 py-2.5 text-sm font-semibold text-blue-700 transition-colors hover:bg-blue-100"
+          >
+            Tài khoản
+          </button>
+          <button
+            type="button"
             onClick={logout}
             className="flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-600 transition-colors hover:bg-slate-50 hover:text-slate-900"
           >
@@ -153,6 +162,13 @@ function AppShell() {
                 </label>
                 <p className="mt-1 text-sm font-semibold text-slate-800">{user?.displayName || user?.userName || 'Người dùng'}</p>
               </div>
+              <button
+                type="button"
+                onClick={() => setIsAccountPanelOpen(true)}
+                className="rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-xs font-bold text-blue-700"
+              >
+                Tài khoản
+              </button>
               <button
                 type="button"
                 onClick={logout}
@@ -187,6 +203,8 @@ function AppShell() {
           <p className="font-medium text-slate-600">&copy; {new Date().getFullYear()} Bản quyền thuộc về Công ty TNHH Sản xuất & Dịch vụ Đức Thành.</p>
         </footer>
       </div>
+
+      {isAccountPanelOpen && <AccountPanel onClose={() => setIsAccountPanelOpen(false)} />}
 
     </div>
   );
