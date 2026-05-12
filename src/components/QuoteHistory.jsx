@@ -1,12 +1,23 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertCircle, ChevronRight, History, Loader2, RefreshCw, Search, User, Users } from 'lucide-react';
+import {
+  AlertCircle,
+  ChevronRight,
+  History,
+  Loader2,
+  Plus,
+  RefreshCw,
+  Search,
+  User,
+  Users,
+} from 'lucide-react';
 import QuoteDetail from './QuoteDetail';
 import { fetchQuotes, QUOTE_HISTORY_REFRESH_EVENT, saveQuote } from '../services/quoteService';
 import { useAuth } from '../context/AuthContext';
 import { useDebounce } from '../hooks/useDebounce';
+import { fetchUsers } from '../services/authService';
+import { PRODUCT_CATEGORIES, getProductCategoryByLabel } from '../constants/productCategories';
 
 const PAGE_SIZE = 100;
-const DEFAULT_PRODUCT_CATEGORIES = ['Tờ rời', 'Catalogue', 'Vở', 'Hộp mềm', 'Túi giấy', 'Phong bì', 'Decal'];
 
 function formatCurrency(value) {
   const amount = Number(value) || 0;
@@ -30,6 +41,20 @@ function normalizeOwner(value) {
   return String(value || '').trim().toLowerCase();
 }
 
+function getEmployeeKey(employee) {
+  return employee?.userName || employee?.displayName || '';
+}
+
+function employeeMatchesQuote(employee, quote) {
+  if (!employee || !quote) return false;
+  const userName = normalizeOwner(employee.userName);
+  const displayName = normalizeOwner(employee.displayName);
+  const createdBy = normalizeOwner(quote.createdBy);
+  const quotedBy = normalizeOwner(quote.quotedBy);
+
+  return Boolean((userName && createdBy === userName) || (displayName && quotedBy === displayName));
+}
+
 function QuoteSkeleton() {
   return (
     <div className="space-y-3">
@@ -44,42 +69,74 @@ function QuoteSkeleton() {
   );
 }
 
-function QuoteHistory({ onEditQuote }) {
+function QuoteHistory({ category, onQuoteListMeta, onEditQuote, onCreateQuote }) {
   const { user } = useAuth();
   const [quotes, setQuotes] = useState([]);
-  const [authorOptions, setAuthorOptions] = useState([]);
+  const [employees, setEmployees] = useState([]);
   const [search, setSearch] = useState('');
-  const [category, setCategory] = useState('');
-  const [quotedByFilter, setQuotedByFilter] = useState('');
+  const [selectedEmployeeKey, setSelectedEmployeeKey] = useState('');
   const [offset, setOffset] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingMore, setIsLoadingMore] = useState(false);
+  const [isLoadingEmployees, setIsLoadingEmployees] = useState(false);
   const [error, setError] = useState('');
+  const [employeeError, setEmployeeError] = useState('');
   const [hasMore, setHasMore] = useState(false);
   const [selectedQuote, setSelectedQuote] = useState(null);
   const debouncedSearch = useDebounce(search, 350);
 
-  const categories = useMemo(() => {
-    const uniqueCategories = new Set(quotes.map((quote) => quote.productCategory).filter(Boolean));
-    DEFAULT_PRODUCT_CATEGORIES.forEach((item) => uniqueCategories.add(item));
-    return Array.from(uniqueCategories).sort((a, b) => a.localeCompare(b, 'vi'));
+  const extraCategoryLabels = useMemo(() => {
+    const unique = new Set();
+    quotes.forEach((quote) => {
+      const label = quote.productCategory;
+      if (label && !PRODUCT_CATEGORIES.some((c) => c.label === label)) unique.add(label);
+    });
+    return Array.from(unique).sort((a, b) => a.localeCompare(b, 'vi'));
   }, [quotes]);
+
+  useEffect(() => {
+    if (!onQuoteListMeta) return;
+    onQuoteListMeta({ extraCategoryLabels, displayedCount: quotes.length });
+  }, [extraCategoryLabels, quotes.length, onQuoteListMeta]);
+
+  const activeCategory = useMemo(() => getProductCategoryByLabel(category), [category]);
+
+  const employeeOptions = useMemo(() => {
+    const optionMap = new Map();
+    employees.forEach((employee) => {
+      const key = getEmployeeKey(employee);
+      if (key) optionMap.set(key, employee);
+    });
+    quotes.forEach((quote) => {
+      if (!quote.quotedBy) return;
+      const key = quote.createdBy || quote.quotedBy;
+      if (!optionMap.has(key)) {
+        optionMap.set(key, {
+          userName: quote.createdBy || '',
+          displayName: quote.quotedBy,
+          role: '',
+          active: true,
+        });
+      }
+    });
+    return Array.from(optionMap.values()).sort((a, b) => (
+      String(a.displayName || a.userName).localeCompare(String(b.displayName || b.userName), 'vi')
+    ));
+  }, [employees, quotes]);
+
+  const selectedEmployee = useMemo(() => (
+    employeeOptions.find((employee) => getEmployeeKey(employee) === selectedEmployeeKey) || null
+  ), [employeeOptions, selectedEmployeeKey]);
 
   const authorCounts = useMemo(() => (
     quotes.reduce((counts, quote) => {
-      const author = quote.quotedBy || 'Chưa xác định';
-      counts[author] = (counts[author] || 0) + 1;
+      employeeOptions.forEach((employee) => {
+        const key = getEmployeeKey(employee);
+        if (key && employeeMatchesQuote(employee, quote)) counts[key] = (counts[key] || 0) + 1;
+      });
       return counts;
     }, {})
-  ), [quotes]);
-
-  const authors = useMemo(() => {
-    const uniqueAuthors = new Set(authorOptions);
-    quotes.forEach((quote) => {
-      if (quote.quotedBy) uniqueAuthors.add(quote.quotedBy);
-    });
-    return Array.from(uniqueAuthors).filter(Boolean).sort((a, b) => a.localeCompare(b, 'vi'));
-  }, [authorOptions, quotes]);
+  ), [employeeOptions, quotes]);
 
   const canEditQuote = useCallback((quote) => {
     if (!quote || !user) return false;
@@ -106,17 +163,11 @@ function QuoteHistory({ onEditQuote }) {
         offset: nextOffset,
         search: debouncedSearch.trim(),
         category,
-        quotedBy: quotedByFilter,
+        quotedBy: selectedEmployee?.displayName || '',
+        createdBy: selectedEmployee?.userName || '',
       });
 
       setQuotes((currentQuotes) => (append ? [...currentQuotes, ...data] : data));
-      setAuthorOptions((currentAuthors) => {
-        const nextAuthors = new Set(currentAuthors);
-        data.forEach((quote) => {
-          if (quote.quotedBy) nextAuthors.add(quote.quotedBy);
-        });
-        return Array.from(nextAuthors).sort((a, b) => a.localeCompare(b, 'vi'));
-      });
       setOffset(nextOffset + data.length);
       setHasMore(data.length === PAGE_SIZE);
     } catch (fetchError) {
@@ -126,7 +177,32 @@ function QuoteHistory({ onEditQuote }) {
       setIsLoading(false);
       setIsLoadingMore(false);
     }
-  }, [category, debouncedSearch, quotedByFilter]);
+  }, [category, debouncedSearch, selectedEmployee]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function loadEmployees() {
+      setIsLoadingEmployees(true);
+      setEmployeeError('');
+
+      try {
+        const data = await fetchUsers();
+        if (!isMounted) return;
+        setEmployees(data.filter((employee) => employee?.active !== false));
+      } catch (fetchError) {
+        if (!isMounted) return;
+        setEmployeeError(fetchError?.message || 'Không tải được danh sách nhân viên.');
+      } finally {
+        if (isMounted) setIsLoadingEmployees(false);
+      }
+    }
+
+    loadEmployees();
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   useEffect(() => {
     setOffset(0);
@@ -147,6 +223,11 @@ function QuoteHistory({ onEditQuote }) {
 
   const handleLoadMore = () => {
     loadQuotes({ nextOffset: offset, append: true });
+  };
+
+  const handleCreateQuote = () => {
+    if (!activeCategory?.canCreateQuote || !onCreateQuote) return;
+    onCreateQuote(activeCategory);
   };
 
   const handleDuplicateQuote = async (quote) => {
@@ -173,106 +254,126 @@ function QuoteHistory({ onEditQuote }) {
     setSelectedQuote(null);
   };
 
+  const title = category || 'Tất cả báo giá';
+  const searchPlaceholder = category
+    ? `Tìm báo giá trong ${category}...`
+    : 'Tìm báo giá theo tên KH hoặc mã BG...';
+  const layoutGridClass = 'xl:grid-cols-[240px_minmax(0,1fr)]';
+  const canCreateCurrentCategory = Boolean(activeCategory?.canCreateQuote && onCreateQuote);
+
   return (
-    <div className="flex h-full min-h-0 flex-col space-y-5">
-      <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-          <div>
-            <div className="flex items-center space-x-2 text-blue-700">
-              <History size={22} />
-              <h2 className="text-xl font-bold text-slate-900">Lịch sử báo giá</h2>
-            </div>
-            <p className="mt-1 text-sm text-slate-500">Tra cứu nhanh các báo giá đã lưu theo khách hàng, mã báo giá hoặc loại sản phẩm.</p>
-          </div>
-          <button
-            type="button"
-            onClick={() => loadQuotes({ nextOffset: 0, append: false })}
-            disabled={isLoading || isLoadingMore}
-            className="inline-flex items-center justify-center space-x-2 rounded-xl border border-slate-200 px-4 py-2 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
-            <span>Làm mới</span>
-          </button>
-        </div>
-
-        <div className="mt-5 grid gap-3 md:grid-cols-[minmax(0,1fr)_260px]">
-          <div className="relative">
-            <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-            <input
-              type="search"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-              placeholder="Tìm Tên KH hoặc Mã BG..."
-              className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-            />
-          </div>
-          <select
-            value={category}
-            onChange={(event) => setCategory(event.target.value)}
-            className="w-full rounded-xl border border-slate-300 bg-slate-50 px-3 py-2.5 text-sm font-medium text-slate-700 outline-none transition-colors focus:border-blue-400 focus:bg-white focus:ring-2 focus:ring-blue-100"
-          >
-            <option value="">Tất cả loại sản phẩm</option>
-            {categories.map((item) => (
-              <option key={item} value={item}>{item}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      <div className="grid min-h-0 flex-1 gap-4 xl:grid-cols-[260px_minmax(0,1fr)]">
+    <div className="grid h-full min-h-0 gap-4 xl:grid-cols-1">
+      <div className={`grid min-h-0 flex-1 gap-4 ${layoutGridClass}`}>
         <aside className="min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="border-b border-slate-200 bg-slate-50 px-4 py-3">
             <div className="flex items-center gap-2 text-sm font-bold uppercase tracking-wider text-slate-600">
               <Users size={16} />
-              <span>Người báo giá</span>
+              <span>Nhân viên</span>
             </div>
           </div>
           <div className="h-full overflow-y-auto p-3 custom-scrollbar">
             <button
               type="button"
-              onClick={() => setQuotedByFilter('')}
+              onClick={() => setSelectedEmployeeKey('')}
               className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors ${
-                quotedByFilter === '' ? 'bg-blue-50 text-blue-700' : 'text-slate-700 hover:bg-slate-50'
+                selectedEmployeeKey === '' ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50'
               }`}
             >
               <span className="flex items-center gap-2">
-                <ChevronRight size={14} className={quotedByFilter === '' ? 'text-blue-500' : 'text-slate-300'} />
+                <ChevronRight size={14} className={selectedEmployeeKey === '' ? 'text-red-500' : 'text-slate-300'} />
                 Tất cả
               </span>
               <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{quotes.length}</span>
             </button>
 
             <div className="ml-3 border-l border-slate-200 pl-2">
-              {authors.length === 0 ? (
-                <div className="px-3 py-2 text-xs text-slate-400">Chưa có dữ liệu người báo giá.</div>
+              {isLoadingEmployees ? (
+                <div className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-slate-400">
+                  <Loader2 size={14} className="animate-spin" />
+                  Đang tải nhân viên...
+                </div>
+              ) : employeeOptions.length === 0 ? (
+                <div className="px-3 py-2 text-xs text-slate-400">Chưa có dữ liệu nhân viên.</div>
               ) : (
-                authors.map((author) => {
-                  const isActive = quotedByFilter === author;
+                employeeOptions.map((employee) => {
+                  const key = getEmployeeKey(employee);
+                  const isActive = selectedEmployeeKey === key;
                   return (
                     <button
-                      key={author}
+                      key={key}
                       type="button"
-                      onClick={() => setQuotedByFilter(author)}
+                      onClick={() => setSelectedEmployeeKey(key)}
                       className={`mb-1 flex w-full items-center justify-between rounded-xl px-3 py-2 text-left text-sm transition-colors ${
-                        isActive ? 'bg-blue-50 font-semibold text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                        isActive ? 'bg-red-50 font-semibold text-red-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
                       }`}
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <User size={14} className={isActive ? 'text-blue-500' : 'text-slate-400'} />
-                        <span className="truncate">{author}</span>
+                        <User size={14} className={isActive ? 'text-red-500' : 'text-slate-400'} />
+                        <span className="truncate">{employee.displayName || employee.userName}</span>
                       </span>
-                      {authorCounts[author] ? (
-                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{authorCounts[author]}</span>
+                      {authorCounts[key] ? (
+                        <span className="ml-2 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{authorCounts[key]}</span>
                       ) : null}
                     </button>
                   );
                 })
               )}
             </div>
+            {employeeError && (
+              <div className="mt-3 rounded-xl bg-amber-50 px-3 py-2 text-xs font-medium text-amber-700">
+                {employeeError}
+              </div>
+            )}
           </div>
         </aside>
 
-        <div className="min-h-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex min-h-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+          <div className="border-b border-slate-200 bg-white p-4">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+              <div>
+                <p className="text-xs font-bold uppercase tracking-wider text-red-600">Danh sách báo giá</p>
+                <h2 className="mt-1 text-2xl font-bold text-slate-900">{title}</h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  {selectedEmployee ? `Đang xem báo giá của ${selectedEmployee.displayName || selectedEmployee.userName}.` : 'Đang xem báo giá của tất cả nhân viên.'}
+                </p>
+              </div>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <button
+                  type="button"
+                  onClick={() => loadQuotes({ nextOffset: 0, append: false })}
+                  disabled={isLoading || isLoadingMore}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  <RefreshCw size={16} className={isLoading ? 'animate-spin' : ''} />
+                  <span>Làm mới</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCreateQuote}
+                  disabled={!canCreateCurrentCategory}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  title={canCreateCurrentCategory ? `Thêm báo giá ${category}` : 'Vui lòng chọn danh mục có form báo giá'}
+                >
+                  <Plus size={16} />
+                  <span>Thêm mới</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              <div className="relative">
+                <Search size={17} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => setSearch(event.target.value)}
+                  placeholder={searchPlaceholder}
+                  className="w-full rounded-xl border border-slate-300 bg-slate-50 py-2.5 pl-10 pr-3 text-sm outline-none transition-colors focus:border-red-400 focus:bg-white focus:ring-2 focus:ring-red-100"
+                />
+              </div>
+            </div>
+          </div>
+
         {error ? (
           <div className="flex min-h-[360px] flex-col items-center justify-center p-8 text-center">
             <AlertCircle size={44} className="mb-3 text-red-500" />
@@ -287,7 +388,7 @@ function QuoteHistory({ onEditQuote }) {
           <div className="flex min-h-[360px] flex-col items-center justify-center p-8 text-center">
             <History size={44} className="mb-3 text-slate-300" />
             <p className="text-base font-semibold text-slate-700">Chưa có báo giá phù hợp</p>
-            <p className="mt-1 text-sm text-slate-500">Thử đổi từ khóa tìm kiếm hoặc bộ lọc loại sản phẩm.</p>
+            <p className="mt-1 text-sm text-slate-500">Thử đổi từ khóa tìm kiếm, danh mục hoặc nhân viên.</p>
           </div>
         ) : (
           <div className="flex h-full flex-col">

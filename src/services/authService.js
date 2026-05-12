@@ -160,3 +160,21 @@ export async function createUserAccount({ userName, displayName, password, role,
 
   return data.user;
 }
+
+export async function fetchUsers() {
+  const url = buildAppsScriptUrl('getUsers');
+  if (!url) throw new Error('Thiếu URL Apps Script để tải danh sách nhân viên.');
+  url.searchParams.set('authToken', getAuthToken());
+
+  const response = await fetch(url.toString(), { redirect: 'follow' });
+  if (!response.ok) {
+    throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+  }
+
+  const data = await response.json();
+  if (data?.ok === false) {
+    throw new Error(data.error || 'Không tải được danh sách nhân viên.');
+  }
+
+  return Array.isArray(data) ? data : data.users || [];
+}

@@ -1,11 +1,25 @@
-import React, { Suspense, lazy, useState } from 'react';
-import { BookOpen, Book, Box, FileText, History, Layout, LogOut, Mail, ShoppingBag, StickyNote } from 'lucide-react';
+import React, { Suspense, lazy, useCallback, useMemo, useState } from 'react';
+import {
+  Calculator,
+  ChevronRight,
+  History,
+  Layout,
+  LogOut,
+  PanelLeftClose,
+  PanelLeftOpen,
+} from 'lucide-react';
 import AccountPanel from './components/AccountPanel';
 import ErrorBoundary from './components/ErrorBoundary';
 import LoginScreen from './components/LoginScreen';
 import { AuthProvider, useAuth } from './context/AuthContext';
 import { PricingDataProvider, usePricingDataContext } from './context/PricingDataContext';
 import { DecalCalculator, PhongBiCalculator, VoCalculator } from './modules/PlaceholderCalculators';
+import {
+  DEFAULT_QUOTE_CATEGORY,
+  PRODUCT_CATEGORIES,
+  getProductCategoryByTabId,
+  getProductCategoryFromQuote,
+} from './constants/productCategories';
 
 const ToRoiCalculator = lazy(() => import('./modules/ToRoiCalculator'));
 const CatalogueCalculator = lazy(() => import('./modules/CatalogueCalculator'));
@@ -14,22 +28,37 @@ const TuiGiayCalculator = lazy(() => import('./modules/TuiGiayCalculator'));
 const QuoteHistory = lazy(() => import('./components/QuoteHistory'));
 
 function AppShell() {
-  const [activeTab, setActiveTab] = useState('toroi');
+  const [activeTab, setActiveTab] = useState('quoteHistory');
+  const [listCategory, setListCategory] = useState(DEFAULT_QUOTE_CATEGORY);
+  const [categoryRailCollapsed, setCategoryRailCollapsed] = useState(false);
+  const [extraCategoryLabels, setExtraCategoryLabels] = useState([]);
+  const [quoteListBadgeCount, setQuoteListBadgeCount] = useState(0);
   const [editingQuote, setEditingQuote] = useState(null);
   const [isAccountPanelOpen, setIsAccountPanelOpen] = useState(false);
   const { user, logout } = useAuth();
   const { priceLoadError } = usePricingDataContext();
 
-  const TABS = [
-    { id: 'toroi', label: 'Tờ rời', icon: FileText },
-    { id: 'catalogue', label: 'Catalogue', icon: BookOpen },
-    { id: 'vo', label: 'Vở', icon: Book },
-    { id: 'hopmem', label: 'Hộp mềm', icon: Box },
-    { id: 'tuigiay', label: 'Túi giấy', icon: ShoppingBag },
-    { id: 'phongbi', label: 'Phong bì', icon: Mail },
-    { id: 'decal', label: 'Decal', icon: StickyNote },
-    { id: 'quoteHistory', label: 'Lịch sử báo giá', icon: History },
-  ];
+  const handleQuoteListMeta = useCallback(({ extraCategoryLabels: extras, displayedCount }) => {
+    setExtraCategoryLabels(extras || []);
+    setQuoteListBadgeCount(typeof displayedCount === 'number' ? displayedCount : 0);
+  }, []);
+
+  const sidebarCategories = useMemo(() => {
+    const extras = (extraCategoryLabels || []).map((label) => ({
+      id: label,
+      label,
+      icon: History,
+    }));
+    return [...PRODUCT_CATEGORIES, ...extras];
+  }, [extraCategoryLabels]);
+
+  const productTabMeta = getProductCategoryByTabId(activeTab);
+  const isQuoteListView = activeTab === 'quoteHistory';
+
+  const isSidebarCategoryActive = (label) => {
+    if (isQuoteListView) return listCategory === label;
+    return productTabMeta?.label === label;
+  };
 
   const confirmCancelEditing = () => {
     if (!editingQuote?.id) return true;
@@ -42,11 +71,25 @@ function AppShell() {
     if (navigateToHistory) setActiveTab('quoteHistory');
   };
 
-  const handleSwitchTab = (tabId) => {
-    if (tabId === activeTab) return;
+  const handleCreateQuote = (category) => {
+    if (!category?.tabId) return;
     if (!confirmCancelEditing()) return;
-    setActiveTab(tabId);
     setEditingQuote(null);
+    setActiveTab(category.tabId);
+  };
+
+  const goToQuoteList = (nextCategory) => {
+    if (!confirmCancelEditing()) return;
+    setEditingQuote(null);
+    setListCategory(nextCategory);
+    setActiveTab('quoteHistory');
+  };
+
+  const openCalculatorTab = (tabId) => {
+    if (!tabId) return;
+    if (!confirmCancelEditing()) return;
+    setEditingQuote(null);
+    setActiveTab(tabId);
   };
 
   const renderContent = () => {
@@ -58,17 +101,27 @@ function AppShell() {
       case 'tuigiay': return <TuiGiayCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
       case 'phongbi': return <PhongBiCalculator />;
       case 'decal': return <DecalCalculator />;
-      case 'quoteHistory': return <QuoteHistory onEditQuote={handleEditQuote} />;
+      case 'quoteHistory': return (
+        <QuoteHistory
+          category={listCategory}
+          onQuoteListMeta={handleQuoteListMeta}
+          onCreateQuote={handleCreateQuote}
+          onEditQuote={handleEditQuote}
+        />
+      );
       default: return <ToRoiCalculator editingQuote={editingQuote} onFinishEditing={handleFinishEditing} />;
     }
   };
 
   const handleEditQuote = (quote) => {
-    const category = String(quote?.productCategory || '').toLowerCase();
-    if (category.includes('catalogue')) setActiveTab('catalogue');
-    else if (category.includes('tờ') || category.includes('to roi') || category.includes('rời')) setActiveTab('toroi');
-    else if (category.includes('hộp') || category.includes('hop')) setActiveTab('hopmem');
-    else if (category.includes('túi') || category.includes('tui')) setActiveTab('tuigiay');
+    const productCategoryLabel = quote?.productCategory?.trim?.() || '';
+    if (productCategoryLabel) setListCategory(productCategoryLabel);
+    else {
+      const mapped = getProductCategoryFromQuote(quote);
+      if (mapped?.label) setListCategory(mapped.label);
+    }
+    const category = getProductCategoryFromQuote(quote);
+    if (category?.tabId) setActiveTab(category.tabId);
     setEditingQuote(quote);
   };
 
@@ -90,33 +143,104 @@ function AppShell() {
         .hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
       `}</style>
       
-      <div className="hidden md:flex w-64 flex-col bg-white border-r border-slate-200 sticky top-0 h-screen overflow-y-auto shrink-0">
-        <div className="p-6 border-b border-slate-100">
-          <div className="flex items-center space-x-3 text-blue-600">
-            <Layout size={28} />
-            <h1 className="text-xl font-bold tracking-tight text-slate-900">Đức Thành Printing</h1>
-          </div>
+      <div
+        className={`hidden md:flex flex-col bg-white border-r border-slate-200 sticky top-0 h-screen overflow-y-auto shrink-0 transition-[width] duration-200 ease-out ${categoryRailCollapsed ? 'w-[4.75rem]' : 'w-64'}`}
+      >
+        <div className={`border-b border-slate-100 flex items-center gap-3 text-blue-600 ${categoryRailCollapsed ? 'justify-center px-3 py-5' : 'p-6'}`}>
+          <Layout size={28} />
+          {!categoryRailCollapsed && (
+            <h1 className="text-xl font-bold tracking-tight text-slate-900 leading-tight">Đức Thành Printing</h1>
+          )}
         </div>
-        
-        <div className="p-4 space-y-1 flex-grow">
-          <p className="text-xs font-semibold text-slate-400 mb-3 px-3 uppercase tracking-wider">Hệ thống tính giá</p>
-          {TABS.map(tab => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => handleSwitchTab(tab.id)}
-                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all duration-200 text-sm font-medium
-                  ${isActive 
-                    ? 'bg-blue-50 text-blue-700 shadow-sm border border-blue-100/50' 
-                    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'}`}
-              >
-                <Icon size={18} className={isActive ? "text-blue-600" : "text-slate-400"} />
-                <span>{tab.label}</span>
-              </button>
-            )
-          })}
+
+        <div className="p-4 space-y-1 flex-grow flex flex-col min-h-0">
+          <div className={`flex items-center mb-3 ${categoryRailCollapsed ? 'justify-center' : 'justify-between px-1'}`}>
+            {!categoryRailCollapsed && (
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Danh mục</p>
+            )}
+            <button
+              type="button"
+              onClick={() => setCategoryRailCollapsed((c) => !c)}
+              className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition-colors hover:bg-slate-50"
+              aria-label={categoryRailCollapsed ? 'Mở rộng danh mục' : 'Thu gọn danh mục'}
+            >
+              {categoryRailCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            </button>
+          </div>
+
+          <div className={`min-h-0 flex-1 overflow-y-auto custom-scrollbar ${categoryRailCollapsed ? 'px-1' : ''}`}>
+            <button
+              type="button"
+              onClick={() => goToQuoteList('')}
+              className={`mb-1 flex w-full items-center rounded-xl px-3 py-2 text-left text-sm font-semibold transition-colors ${
+                categoryRailCollapsed ? 'justify-center' : 'justify-between'
+              } ${
+                isSidebarCategoryActive('') ? 'bg-red-50 text-red-700' : 'text-slate-700 hover:bg-slate-50'
+              }`}
+              title="Tất cả"
+            >
+              <span className={`flex min-w-0 items-center ${categoryRailCollapsed ? 'justify-center' : 'gap-2'}`}>
+                <ChevronRight size={14} className={isSidebarCategoryActive('') ? 'text-red-500' : 'text-slate-300'} />
+                {!categoryRailCollapsed && <span className="truncate">Tất cả</span>}
+              </span>
+              {!categoryRailCollapsed && (
+                <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-500">{quoteListBadgeCount}</span>
+              )}
+            </button>
+
+            <div className={categoryRailCollapsed ? 'space-y-1' : 'ml-2 border-l border-slate-200 pl-2'}>
+              {sidebarCategories.map((item) => {
+                const Icon = item.icon || History;
+                const isActive = isSidebarCategoryActive(item.label);
+                const tabId = item.tabId || '';
+                if (categoryRailCollapsed) {
+                  return (
+                    <button
+                      key={item.id || item.label}
+                      type="button"
+                      onClick={() => goToQuoteList(item.label)}
+                      className={`mb-1 flex w-full items-center justify-center rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                        isActive ? 'bg-red-50 font-semibold text-red-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                      title={item.label}
+                    >
+                      <Icon size={18} className={isActive ? 'text-red-500' : 'text-slate-400'} />
+                    </button>
+                  );
+                }
+                return (
+                  <div key={item.id || item.label} className="mb-1 flex w-full gap-1">
+                    <button
+                      type="button"
+                      onClick={() => goToQuoteList(item.label)}
+                      className={`flex min-w-0 flex-1 items-center gap-2 rounded-xl px-3 py-2 text-left text-sm transition-colors ${
+                        isActive ? 'bg-red-50 font-semibold text-red-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-900'
+                      }`}
+                      title={`Danh sách: ${item.label}`}
+                    >
+                      <Icon size={18} className={`shrink-0 ${isActive ? 'text-red-500' : 'text-slate-400'}`} />
+                      <span className="truncate">{item.label}</span>
+                    </button>
+                    {tabId ? (
+                      <button
+                        type="button"
+                        onClick={() => openCalculatorTab(tabId)}
+                        className={`inline-flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
+                          activeTab === tabId && !isQuoteListView
+                            ? 'border-red-200 bg-red-50 text-red-700'
+                            : 'border-slate-200 bg-white text-slate-500 hover:bg-slate-50'
+                        }`}
+                        title="Mở máy tính giá"
+                        aria-label={`Mở máy tính ${item.label}`}
+                      >
+                        <Calculator size={16} />
+                      </button>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         <div className="border-t border-slate-100 p-4">
@@ -157,8 +281,8 @@ function AppShell() {
           <div className="md:hidden mb-4 bg-white border border-slate-200 rounded-2xl p-3 shadow-sm shrink-0">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <label htmlFor="mobile-tab-select" className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
-                  Hệ thống tính giá
+                <label htmlFor="mobile-category-select" className="block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+                  Danh mục báo giá
                 </label>
                 <p className="mt-1 text-sm font-semibold text-slate-800">{user?.displayName || user?.userName || 'Người dùng'}</p>
               </div>
@@ -178,14 +302,32 @@ function AppShell() {
                 <LogOut size={18} />
               </button>
             </div>
+            {activeTab !== 'quoteHistory' ? (
+              <div className="mb-3 flex flex-col gap-2 rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-sm font-medium text-amber-900">
+                <span>Đang tạo báo giá ({productTabMeta?.label || activeTab}).</span>
+                <button
+                  type="button"
+                  className="w-full rounded-lg border border-slate-200 bg-white py-2 text-sm font-semibold text-slate-800"
+                  onClick={() => goToQuoteList(listCategory)}
+                >
+                  Quay lại danh sách
+                </button>
+              </div>
+            ) : null}
+            <label htmlFor="mobile-category-select" className="mb-1 block text-xs font-semibold text-slate-500 uppercase tracking-wider">
+              Chọn danh mục
+            </label>
             <select
-              id="mobile-tab-select"
-              value={activeTab}
-              onChange={(e) => handleSwitchTab(e.target.value)}
+              id="mobile-category-select"
+              value={listCategory}
+              onChange={(e) => goToQuoteList(e.target.value)}
               className="w-full p-3 bg-slate-50 border border-slate-300 rounded-xl text-sm font-medium text-slate-700 outline-none"
             >
-              {TABS.map(tab => (
-                <option key={tab.id} value={tab.id}>{tab.label}</option>
+              <option value="">Tất cả</option>
+              {sidebarCategories.map((item) => (
+                <option key={item.id || item.label} value={item.label}>
+                  {item.label}
+                </option>
               ))}
             </select>
           </div>
